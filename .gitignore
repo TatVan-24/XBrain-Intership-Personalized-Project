@@ -3,9 +3,16 @@ __pycache__/
 *.pyc
 *.db
 
-OTEL project/README_old.md
-OTEL project/GUIDELINE.md
-OTEL project/source/idea/
+# Local project context — do not publish
+/GUIDELINE.md
+/README_old.md
+/.github/
+/phase3/
+/source/README.md
+/source/RULES.md
+/source/GETTING_STARTED.md
+/source/JIRA_EXPORT.md
+/source/idea/
 
 # TF2 capstone answer key + generator — must NOT reach the learners repo
 capstone-phase2/data/tf2-finops/MENTOR_ONLY_DO_NOT_COMMIT/
