@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.db
+
+OTEL project/README_old.md
+OTEL project/GUIDELINE.md
+OTEL project/source/idea/
+
+# TF2 capstone answer key + generator — must NOT reach the learners repo
+capstone-phase2/data/tf2-finops/MENTOR_ONLY_DO_NOT_COMMIT/
