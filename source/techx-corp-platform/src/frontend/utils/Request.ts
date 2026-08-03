@@ -4,7 +4,7 @@
 interface IRequestParams {
   url: string;
   body?: object;
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   queryParams?: Record<string, any>;
   headers?: Record<string, string>;
 }
@@ -25,6 +25,11 @@ const request = async <T>({
   });
 
   const responseText = await response.text();
+
+  if (!response.ok) {
+    const payload = responseText ? JSON.parse(responseText) : {};
+    throw new Error(payload.detail || `Request failed with status ${response.status}`);
+  }
 
   if (!!responseText) return JSON.parse(responseText);
 

@@ -12,6 +12,7 @@ import FrontendTracer from '../utils/telemetry/FrontendTracer';
 import SessionGateway from '../gateways/Session.gateway';
 import { OpenFeatureProvider, OpenFeature } from '@openfeature/react-sdk';
 import { FlagdWebProvider } from '@openfeature/flagd-web-provider';
+import AuthProvider from '../providers/Auth.provider';
 
 declare global {
   interface Window {
@@ -64,9 +65,11 @@ function MyApp({ Component, pageProps }: AppProps) {
       <OpenFeatureProvider>
         <QueryClientProvider client={queryClient}>
           <CurrencyProvider>
-            <CartProvider>
-              <Component {...pageProps} />
-            </CartProvider>
+            <AuthProvider>
+              <CartProvider>
+                <Component {...pageProps} />
+              </CartProvider>
+            </AuthProvider>
           </CurrencyProvider>
         </QueryClientProvider>
       </OpenFeatureProvider>

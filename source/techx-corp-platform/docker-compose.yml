@@ -289,6 +289,9 @@ services:
       - CURRENCY_ADDR
       - PRODUCT_CATALOG_ADDR
       - PRODUCT_REVIEWS_ADDR
+      - PRODUCT_REVIEWS_HTTP_ADDR
+      - USER_SERVICE_ADDR
+      - COOKIE_SECURE
       - RECOMMENDATION_ADDR
       - SHIPPING_ADDR
       - OTEL_EXPORTER_OTLP_ENDPOINT
@@ -312,6 +315,8 @@ services:
         condition: service_started
       product-catalog:
         condition: service_started
+      user-service:
+        condition: service_healthy
       quote:
         condition: service_started
       recommendation:
@@ -529,8 +534,10 @@ services:
     restart: unless-stopped
     ports:
       - "${PRODUCT_REVIEWS_PORT}"
+      - "${PRODUCT_REVIEWS_HTTP_PORT}"
     environment:
       - PRODUCT_REVIEWS_PORT
+      - PRODUCT_REVIEWS_HTTP_PORT
       - OTEL_PYTHON_LOG_CORRELATION=true
       - OTEL_EXPORTER_OTLP_ENDPOINT
       - OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
@@ -556,6 +563,40 @@ services:
         condition: service_started
       otel-collector:
         condition: service_started
+    logging: *logging
+
+  # User identity and session service
+  user-service:
+    image: ${IMAGE_NAME}:${DEMO_VERSION}-user-service
+    container_name: user-service
+    build:
+      context: ./
+      dockerfile: ${USER_SERVICE_DOCKERFILE}
+      cache_from:
+        - ${IMAGE_NAME}:${IMAGE_VERSION}-user-service
+    deploy:
+      resources:
+        limits:
+          memory: 100M
+    restart: unless-stopped
+    ports:
+      - "${USER_SERVICE_PORT}"
+    environment:
+      - USER_SERVICE_PORT
+      - SESSION_TTL_HOURS
+      - DB_CONNECTION_STRING=postgresql://otelu:otelp@${POSTGRES_HOST}/${POSTGRES_DB}
+      - OTEL_EXPORTER_OTLP_ENDPOINT
+      - OTEL_RESOURCE_ATTRIBUTES
+      - OTEL_SERVICE_NAME=user-service
+    depends_on:
+      postgresql:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/health/ready', timeout=2)"]
+      start_period: 10s
+      interval: 10s
+      timeout: 3s
+      retries: 5
     logging: *logging
 
   # Quote service

@@ -4,8 +4,10 @@
 import CartIcon from '../CartIcon';
 import CurrencySwitcher from '../CurrencySwitcher';
 import * as S from './Header.styled';
+import { useAuth } from '../../providers/Auth.provider';
 
 const Header = () => {
+  const { user, loading, logout } = useAuth();
   return (
     <S.Header>
       <S.NavBar>
@@ -14,6 +16,12 @@ const Header = () => {
             <S.BrandImg />
           </S.NavBarBrand>
           <S.Controls>
+            {!loading && (user ? (
+              <S.Account>
+                <span>Hello, {user.username}</span>
+                <button type="button" onClick={logout}>Logout</button>
+              </S.Account>
+            ) : <S.AuthLink href="/auth">Login / Register</S.AuthLink>)}
             <CurrencySwitcher />
             <CartIcon />
           </S.Controls>

@@ -42,6 +42,11 @@ export const HotProductsTitle = styled.h1`
   }
 `;
 
+export const Search = styled.input`
+  width: min(100%, 680px); height: 48px; margin: 0 0 28px; padding: 0 16px;
+  border: 1px solid #aaa; border-radius: 10px; font-size: 16px;
+`;
+
 export const Home = styled.div`
   @media (max-width: 992px) {
     ${Content} {

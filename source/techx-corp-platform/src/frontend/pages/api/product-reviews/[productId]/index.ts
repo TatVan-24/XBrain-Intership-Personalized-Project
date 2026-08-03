@@ -3,20 +3,33 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import InstrumentationMiddleware from '../../../../utils/telemetry/InstrumentationMiddleware';
-import { Empty, ProductReview } from '../../../../protos/demo';
-import ProductReviewService from '../../../../services/ProductReview.service';
+import { resolveUser } from '../../../../utils/authServer';
 
-type TResponse = ProductReview[] | Empty;
+const { PRODUCT_REVIEWS_HTTP_ADDR = '' } = process.env;
 
-const handler = async ({ method, query }: NextApiRequest, res: NextApiResponse<TResponse>) => {
+const handler = async (req: NextApiRequest, res: NextApiResponse) => {
+    const { method, query } = req;
 
     switch (method) {
         case 'GET': {
-            const { productId = '' } = query;
+            const { productId = '', limit = '5', offset = '0' } = query;
 
-            const productReviews = await ProductReviewService.getProductReviews(productId as string);
+            const params = new URLSearchParams({ limit: limit as string, offset: offset as string });
+            const upstream = await fetch(`${PRODUCT_REVIEWS_HTTP_ADDR}/v1/products/${encodeURIComponent(productId as string)}/reviews?${params}`);
+            res.setHeader('content-type', 'application/json');
+            return res.status(upstream.status).send(await upstream.text());
+        }
 
-            return res.status(200).json(productReviews);
+        case 'POST': {
+            const user = await resolveUser(req);
+            if (!user) return res.status(401).json({ detail: 'Authentication required' });
+            const upstream = await fetch(`${PRODUCT_REVIEWS_HTTP_ADDR}/v1/products/${encodeURIComponent(query.productId as string)}/reviews`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', 'x-user-id': user.id, 'x-username': user.username },
+                body: JSON.stringify(req.body),
+            });
+            res.setHeader('content-type', 'application/json');
+            return res.status(upstream.status).send(await upstream.text());
         }
 
         default: {

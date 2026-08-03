@@ -11,9 +11,11 @@ import ApiGateway from '../gateways/Api.gateway';
 import Banner from '../components/Banner';
 import { CypressFields } from '../utils/enums/CypressFields';
 import { useCurrency } from '../providers/Currency.provider';
+import { useState } from 'react';
 
 const Home: NextPage = () => {
   const { selectedCurrency } = useCurrency();
+  const [search, setSearch] = useState('');
   const { data: productList = [] } = useQuery({
     queryKey: ['products', selectedCurrency],
     queryFn: () => ApiGateway.listProducts(selectedCurrency),
@@ -33,7 +35,18 @@ const Home: NextPage = () => {
                 <S.HotProductsTitle data-cy={CypressFields.HotProducts} id="hot-products">
                   Hot Products
                 </S.HotProductsTitle>
-                <ProductList productList={productList} />
+                <S.Search
+                  type="search"
+                  value={search}
+                  onChange={event => setSearch(event.target.value)}
+                  placeholder="Search products by name, description or category"
+                  aria-label="Search products"
+                />
+                <ProductList productList={productList.filter(product => {
+                  const query = search.trim().toLowerCase();
+                  return !query || [product.name, product.description, ...(product.categories || [])]
+                    .some(value => value.toLowerCase().includes(query));
+                })} />
               </S.HotProducts>
             </S.Content>
           </S.Row>
