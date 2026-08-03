@@ -1,7 +1,71 @@
+# Secrets and local environment overrides
+.env
+.env.*
+*.env
+!.env.example
+!*.env.example
+.aws/
+*.pem
+*.p12
+*.pfx
+
+# Python
 .venv/
+venv/
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Java / Gradle
+.gradle/
+**/build/reports/
+
+# Node / frontend
+node_modules/
+.next/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# .NET and Rust build output
+bin/
+obj/
+target/
+
+# IDE and operating-system files
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local runtime and temporary data
 *.db
+*.db-shm
+*.db-wal
+*.log
+*.tmp
+*.temp
+
+# Terraform local state and private variable values
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
+# Helm dependency/build output
+**/charts/
+*.tgz
 
 # Local project context — do not publish
 /GUIDELINE.md

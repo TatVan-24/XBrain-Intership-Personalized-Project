@@ -24,7 +24,7 @@ the agreed project target is a local Docker Compose runtime.
 | Helm lint/template | NOT VALIDATED | Helm CLI is missing |
 | Native Go/.NET/Rust build | NOT VALIDATED | Host SDKs are missing |
 | Container image build | PASS | 20/20 required application images are present locally |
-| Runtime startup | BLOCKED BY ENVIRONMENT | Docker CDN repeatedly returned EOF for Valkey, PostgreSQL and Grafana image layers |
+| Runtime startup | PASS AFTER REPAIR | 28/28 services running; storefront, Grafana and Prometheus returned HTTP 200 |
 
 ## Confirmed readiness blockers
 

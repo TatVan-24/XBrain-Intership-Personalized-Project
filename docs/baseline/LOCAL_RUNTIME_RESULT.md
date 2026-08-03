@@ -2,11 +2,10 @@
 
 ## Status
 
-`BLOCKED — REQUIRED DEPENDENCY IMAGES COULD NOT BE DOWNLOADED`
+`PASS — FULL LOCAL RUNTIME BASELINE STARTED`
 
-The Step 5 full-stack startup was attempted with Docker Compose, but the local
-runtime could not be created because Docker repeatedly lost connections while
-reading image layers from Docker Hub's CloudFront delivery endpoint.
+The Step 5 full-stack startup completed with Docker Compose. All 28 declared
+services are running and the public storefront returned HTTP 200.
 
 ## Startup attempt
 
@@ -27,9 +26,48 @@ can be made from this attempt.
 | jaeger | `jaegertracing/jaeger:2.12.0` | PULLED AFTER RETRIES |
 | otel-collector | `ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.142.0` | PULLED |
 | prometheus | `quay.io/prometheus/prometheus:v3.8.1` | PULLED |
-| valkey-cart | `valkey/valkey:9.0.1-alpine3.23` | BLOCKED BY REPEATED EOF |
-| postgresql | `postgres:17.6` | BLOCKED BY REPEATED EOF |
-| grafana | `grafana/grafana:12.3.1` | BLOCKED BY REPEATED EOF |
+| valkey-cart | `valkey/valkey:9.0.1-alpine3.23` | PULLED AFTER RETRIES |
+| postgresql | `postgres:17.6` | PULLED VIA SKOPEO WORKAROUND |
+| grafana | `grafana/grafana:12.3.1` | PULLED VIA SKOPEO WORKAROUND |
+
+Docker Engine continued to receive CloudFront EOF errors even after a Docker
+Desktop restart. The exact Docker Hub images were therefore copied with Skopeo
+and imported into the local Docker daemon. Compose configuration and image tags
+were not changed.
+
+## Runtime evidence
+
+All 28 services declared by the full Compose project are running. Product
+catalog restarted twice during the initial PostgreSQL startup window, recovered,
+and remained running; no other non-zero restart count was observed.
+
+| Check | Result |
+| --- | --- |
+| Kafka container health | HEALTHY |
+| OpenSearch container health | HEALTHY |
+| Valkey command | `PONG` |
+| Flagd UI HTTP | 200 |
+| Jaeger HTTP | 200 |
+| OpenSearch HTTP | 200 |
+| Prometheus readiness HTTP | 200 |
+| Grafana health HTTP | 200 |
+| Storefront through frontend-proxy | 200 (11,342-byte response) |
+| OTEL debug exporter | Logs, metrics and traces observed |
+
+The earlier OTEL PostgreSQL receiver DNS errors were generated only during the
+degraded run before PostgreSQL existed. No fatal, panic, exception or connection
+refused entry was found in the final 45-second full-runtime log window.
+
+## Runtime defect repaired
+
+`flagd-ui` originally failed before process creation because its Dockerfile
+called `/app/bin/server`, while the built release only contained
+`/app/bin/flagd_ui`. The raw repository did not include the Phoenix release
+overlay that normally generates `bin/server`.
+
+The image now starts `/app/bin/flagd_ui start` and sets `PHX_SERVER=true` in the
+final runtime stage. After rebuilding, Bandit listened on port 4000 and the root
+HTTP endpoint returned 200.
 
 ## Failure classification
 
@@ -47,18 +85,15 @@ and all 20 locally built application images remain available.
 
 ## Validation not reached
 
-- container running/healthy state;
-- PostgreSQL, Valkey and Kafka connectivity;
-- storefront HTTP smoke path;
-- checkout/Kafka event path;
-- OTLP ingestion and Grafana/Jaeger/OpenSearch visibility;
-- clean full-stack shutdown behavior.
+- a complete interactive checkout/Kafka business transaction;
+- browser-level UI automation;
+- trace correlation across every service in one transaction;
+- clean full-stack shutdown and cold-start recovery behavior.
 
-## Resume condition
+## Current local state
 
-Resume Step 5 after Docker can successfully pull the three missing pinned
-images. Re-run `docker compose up -d --remove-orphans`; Docker should reuse the
-layers and dependency images already cached locally. Do not change image tags or
-source code merely to bypass this network failure.
+The full stack remains running for continued functional validation. PostgreSQL
+and Grafana are now present in the local Docker image store, so future Compose
+starts do not depend on downloading those images again.
 
 No registry push, Git commit, Git push or Kubernetes deployment was performed.
