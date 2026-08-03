@@ -6,37 +6,57 @@ import { useProductReview } from '../../providers/ProductReview.provider';
 import { useAiAssistant } from '../../providers/ProductAIAssistant.provider';
 import React, { useState, useMemo } from 'react';
 import { CypressFields } from '../../utils/enums/CypressFields';
+import { useAuth } from '../../providers/Auth.provider';
 
 const clamp = (n: number, min = 0, max = 5) => Math.max(min, Math.min(max, n));
 
 const StarRating = ({ value, max = 5 }: { value: number; max?: number }) => {
   const rounded = clamp(Math.round(value), 0, max);
-  const stars = Array.from({ length: max }, (_, i) => (i < rounded ? '★' : '☆')).join(' ');
+  const stars = Array.from({ length: max }, (_, i) => (i < rounded ? '★' : '☆')).join('');
   return <S.StarRating aria-label={`${value.toFixed(1)} out of ${max} stars`}>{stars}</S.StarRating>;
 };
 
+const StarInput = ({ value, onChange }: { value: number; onChange: (score: number) => void }) => (
+    <S.StarInput role="radiogroup" aria-label="Review rating">
+        {[1, 2, 3, 4, 5].map(score => (
+            <button
+                key={score}
+                type="button"
+                role="radio"
+                aria-checked={value === score}
+                aria-label={`${score} star${score > 1 ? 's' : ''}`}
+                onClick={() => onChange(score)}
+            >
+                {score <= value ? '★' : '☆'}
+            </button>
+        ))}
+    </S.StarInput>
+);
+
 const ProductReviews = () => {
-    const { productReviews, loading, error, averageScore } = useProductReview();
+    const { productReviews, loading, error, averageScore, totalReviews, ratingDistribution, loadMore, createReview, updateReview, deleteReview } = useProductReview();
+    const { user } = useAuth();
+    const [reviewText, setReviewText] = useState('');
+    const [reviewScore, setReviewScore] = useState(5);
+    const [reviewError, setReviewError] = useState('');
+    const [expandedReviews, setExpandedReviews] = useState<Record<string, boolean>>({});
+    const submitReview = async () => {
+        setReviewError('');
+        try { await createReview({ description: reviewText, score: reviewScore }); setReviewText(''); }
+        catch (cause) { setReviewError(cause instanceof Error ? cause.message : 'Review failed'); }
+    };
 
     const average = useMemo(() => {
         if (!averageScore) return null;
         return clamp(Number(averageScore));
     }, [averageScore]);
 
-    const distribution = useMemo(() => {
-        if (!Array.isArray(productReviews)) return [0, 0, 0, 0, 0];
-        const counts = [0, 0, 0, 0, 0];
-        for (const r of productReviews) {
-            const s = clamp(Math.round(Number(r.score)), 1, 5); // round first, clamp to [1,5]
-            counts[s - 1] += 1;
-        }
-        return counts;
-    }, [productReviews]);
+    const distribution = ratingDistribution;
 
     const normalizedPercents = useMemo(() => {
-        if (!Array.isArray(productReviews) || productReviews.length === 0) return [0, 0, 0, 0, 0];
+        if (!totalReviews) return [0, 0, 0, 0, 0];
 
-        const raw = distribution.map(c => (c / productReviews.length) * 100);
+        const raw = distribution.map(c => (c / totalReviews) * 100);
         const floored = raw.map(p => Math.floor(p));
         const sumFloors = floored.reduce((a, b) => a + b, 0);
         let remainder = 100 - sumFloors;
@@ -50,7 +70,7 @@ const ProductReviews = () => {
             final[order[k].i] += 1;
         }
         return final;
-    }, [distribution, productReviews]);
+    }, [distribution, totalReviews]);
 
     // AI Assistant (provider-driven)
     const [aiQuestion, setAiQuestion] = useState('');
@@ -163,7 +183,7 @@ const ProductReviews = () => {
                                     <S.AverageScoreBadge>{average.toFixed(1)}</S.AverageScoreBadge>
                                     <StarRating value={average} />
                                     <S.ScoreCount>
-                                        {Array.isArray(productReviews) ? `${productReviews.length} reviews` : ''}
+                                        {`${totalReviews} reviews`}
                                     </S.ScoreCount>
                                 </S.AverageBlock>
 
@@ -190,20 +210,50 @@ const ProductReviews = () => {
                     </S.SummaryCard>
                 )}
 
+                {user ? <S.ReviewForm>
+                    <strong>Write a review</strong>
+                    <S.ReviewFormControls>
+                        <textarea value={reviewText} maxLength={1024} onChange={event => setReviewText(event.target.value)} placeholder="Share your experience" />
+                        <StarInput value={reviewScore} onChange={setReviewScore} />
+                        <button type="button" disabled={!reviewText.trim()} onClick={submitReview}>Submit review</button>
+                    </S.ReviewFormControls>
+                    {reviewError && <span role="alert">{reviewError}</span>}
+                </S.ReviewForm> : <S.LoginPrompt><a href="/auth">Login</a> to write a review.</S.LoginPrompt>}
+
           {Array.isArray(productReviews) && productReviews.length > 0 && (
             <S.ReviewsGrid as="ul">
-              {productReviews.map((review, idx) => (
-                <S.ReviewCard as="li" key={`${review.username}-${review.score}-${idx}`}>
+              {productReviews.map((review: typeof productReviews[number] & { id?: number; user_id?: string; created_at?: string }, idx) => {
+                const reviewKey = String(review.id ?? `${review.username}-${idx}`);
+                const isLong = (review.description?.length || 0) > 180;
+                return <S.ReviewCard as="li" key={reviewKey}>
                   <S.ReviewHeader>
-                    <S.ReviewerName>{review.username}</S.ReviewerName>
+                    <div>
+                      <S.ReviewerName>{review.username}</S.ReviewerName>
+                      {review.created_at && <S.ReviewDate>{new Date(review.created_at).toLocaleDateString()}</S.ReviewDate>}
+                    </div>
                     <StarRating value={Number(review.score) || 0} />
                   </S.ReviewHeader>
-                  <S.ReviewBody>
+                  <S.ReviewBody $expanded={!!expandedReviews[reviewKey]}>
                     {review.description || 'No description provided.'}
                   </S.ReviewBody>
-                </S.ReviewCard>
-              ))}
+                  {isLong && <S.ReadMore type="button" onClick={() => setExpandedReviews(current => ({ ...current, [reviewKey]: !current[reviewKey] }))}>
+                    {expandedReviews[reviewKey] ? 'Show less' : 'Read more'}
+                  </S.ReadMore>}
+                  {user?.id === review.user_id && review.id && <S.OwnerActions>
+                    <button type="button" onClick={async () => {
+                      const description = window.prompt('Update your review', review.description) ?? '';
+                      if (description.trim()) await updateReview(review.id!, { description, score: Number(review.score) });
+                    }}>Edit</button>
+                    <button type="button" onClick={() => deleteReview(review.id!)}>Delete</button>
+                  </S.OwnerActions>}
+                </S.ReviewCard>;
+              })}
             </S.ReviewsGrid>
+          )}
+          {Array.isArray(productReviews) && productReviews.length < totalReviews && (
+            <S.SeeMore type="button" onClick={loadMore} disabled={loading}>
+              {loading ? 'Loading…' : `See more (${totalReviews - productReviews.length} remaining)`}
+            </S.SeeMore>
           )}
         </>
       )}

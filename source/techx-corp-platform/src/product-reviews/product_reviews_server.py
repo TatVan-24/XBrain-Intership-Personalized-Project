@@ -9,6 +9,9 @@ import os
 import json
 from concurrent import futures
 import random
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
+from urllib.parse import parse_qs, urlparse
 
 # Pip
 import grpc
@@ -28,7 +31,11 @@ import demo_pb2
 import demo_pb2_grpc
 from grpc_health.v1 import health_pb2
 from grpc_health.v1 import health_pb2_grpc
-from database import fetch_product_reviews, fetch_product_reviews_from_db, fetch_avg_product_review_score_from_db
+from database import (
+    fetch_product_reviews, fetch_product_reviews_from_db, fetch_avg_product_review_score_from_db,
+    create_product_review, update_product_review, delete_product_review,
+    list_product_reviews,
+)
 
 from openfeature import api
 from openfeature.contrib.provider.flagd import FlagdProvider
@@ -113,6 +120,108 @@ class ProductReviewService(demo_pb2_grpc.ProductReviewServiceServicer):
     def Watch(self, request, context):
         return health_pb2.HealthCheckResponse(
             status=health_pb2.HealthCheckResponse.UNIMPLEMENTED)
+
+def review_to_dict(row):
+    return {
+        "id": row[0], "product_id": row[1], "user_id": str(row[2]) if row[2] else None, "username": row[3],
+        "description": row[4], "score": str(row[5]),
+        "created_at": row[6].isoformat(), "updated_at": row[7].isoformat(),
+    }
+
+class ReviewHttpHandler(BaseHTTPRequestHandler):
+    def send_json(self, status_code, payload=None):
+        body = json.dumps(payload).encode() if payload is not None else b""
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def identity(self):
+        user_id = self.headers.get("X-User-Id")
+        username = self.headers.get("X-Username")
+        if not user_id or not username:
+            self.send_json(401, {"detail": "Authentication required"})
+            return None
+        return user_id, username
+
+    def body(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        return json.loads(self.rfile.read(length) or b"{}")
+
+    def do_GET(self):
+        path = urlparse(self.path).path
+        if path in ("/health/live", "/health/ready"):
+            return self.send_json(200, {"status": "ok"})
+        parts = path.strip("/").split("/")
+        if len(parts) == 4 and parts[:2] == ["v1", "products"] and parts[3] == "reviews":
+            query = parse_qs(urlparse(self.path).query)
+            limit = min(max(int(query.get("limit", ["5"])[0]), 1), 50)
+            offset = max(int(query.get("offset", ["0"])[0]), 0)
+            rows, total, distribution = list_product_reviews(parts[2], limit, offset)
+            return self.send_json(200, {
+                "items": [review_to_dict(row) for row in rows],
+                "total": total,
+                "distribution": distribution,
+                "limit": limit,
+                "offset": offset,
+            })
+        return self.send_json(404, {"detail": "Not found"})
+
+    def do_POST(self):
+        parts = urlparse(self.path).path.strip("/").split("/")
+        if len(parts) != 4 or parts[:2] != ["v1", "products"] or parts[3] != "reviews":
+            return self.send_json(404, {"detail": "Not found"})
+        identity = self.identity()
+        if not identity:
+            return
+        try:
+            payload = self.body()
+            score = float(payload.get("score", 0))
+            description = str(payload.get("description", "")).strip()
+            if not description or not 1 <= score <= 5:
+                return self.send_json(422, {"detail": "Description and score from 1 to 5 are required"})
+            row = create_product_review(parts[2], identity[0], identity[1], description, score)
+            logger.info("review.created product_id=%s user_id=%s review_id=%s", parts[2], identity[0], row[0])
+            return self.send_json(201, review_to_dict(row))
+        except Exception as error:
+            if "product_review_user_unique" in str(error):
+                return self.send_json(409, {"detail": "User already reviewed this product"})
+            logger.exception("review create failed")
+            return self.send_json(500, {"detail": "Review could not be created"})
+
+    def do_PATCH(self):
+        return self.mutate_review(False)
+
+    def do_DELETE(self):
+        return self.mutate_review(True)
+
+    def mutate_review(self, deleting):
+        parts = urlparse(self.path).path.strip("/").split("/")
+        if len(parts) != 3 or parts[:2] != ["v1", "reviews"] or not parts[2].isdigit():
+            return self.send_json(404, {"detail": "Not found"})
+        identity = self.identity()
+        if not identity:
+            return
+        if deleting:
+            found = delete_product_review(int(parts[2]), identity[0])
+            if not found:
+                return self.send_json(404, {"detail": "Review not found"})
+            logger.info("review.deleted user_id=%s review_id=%s", identity[0], parts[2])
+            return self.send_json(204)
+        payload = self.body()
+        score = float(payload.get("score", 0))
+        description = str(payload.get("description", "")).strip()
+        if not description or not 1 <= score <= 5:
+            return self.send_json(422, {"detail": "Description and score from 1 to 5 are required"})
+        row = update_product_review(int(parts[2]), identity[0], description, score)
+        if not row:
+            return self.send_json(404, {"detail": "Review not found"})
+        logger.info("review.updated user_id=%s review_id=%s", identity[0], parts[2])
+        return self.send_json(200, review_to_dict(row))
+
+    def log_message(self, format, *args):
+        logger.debug(format, *args)
 
 def get_product_reviews(request_product_id):
 
@@ -380,5 +489,8 @@ if __name__ == "__main__":
     port = must_map_env('PRODUCT_REVIEWS_PORT')
     server.add_insecure_port(f'[::]:{port}')
     server.start()
+    http_port = int(must_map_env('PRODUCT_REVIEWS_HTTP_PORT'))
+    http_server = ThreadingHTTPServer(("0.0.0.0", http_port), ReviewHttpHandler)
+    Thread(target=http_server.serve_forever, daemon=True).start()
     logger.info(f'Product reviews service started, listening on port {port}')
     server.wait_for_termination()

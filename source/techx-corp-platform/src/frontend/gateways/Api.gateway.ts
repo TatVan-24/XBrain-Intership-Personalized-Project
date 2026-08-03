@@ -73,10 +73,20 @@ const Apis = () => ({
       queryParams: { currencyCode },
     });
   },
-  getProductReviews(productId: string) {
-    return request<ProductReview[]>({
-      url: `${basePath}/product-reviews/${productId}`
+  getProductReviews(productId: string, limit = 5) {
+    return request<{ items: ProductReview[]; total: number; distribution: number[] }>({
+      url: `${basePath}/product-reviews/${productId}`,
+      queryParams: { limit, offset: 0 },
     });
+  },
+  createProductReview(productId: string, review: { description: string; score: number }) {
+    return request<ProductReview>({ url: `${basePath}/product-reviews/${productId}`, method: 'POST', body: review });
+  },
+  updateProductReview(reviewId: number, review: { description: string; score: number }) {
+    return request<ProductReview>({ url: `${basePath}/reviews/${reviewId}`, method: 'PATCH', body: review });
+  },
+  deleteProductReview(reviewId: number) {
+    return request<void>({ url: `${basePath}/reviews/${reviewId}`, method: 'DELETE' });
   },
   getAverageProductReviewScore(productId: string) {
     return request<string>({

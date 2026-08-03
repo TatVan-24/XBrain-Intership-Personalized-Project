@@ -51,5 +51,13 @@ export const BrandImg = styled.img.attrs({
 
 export const Controls = styled.div`
   display: flex;
+  align-items: center;
+  gap: 18px;
   height: 60px;
+`;
+
+export const AuthLink = styled(Link)`color: #5262a8; font-weight: 700; white-space: nowrap;`;
+export const Account = styled.div`
+  display: flex; align-items: center; gap: 10px; color: #333; white-space: nowrap;
+  button { border: 0; background: none; color: #5262a8; cursor: pointer; font-weight: 700; }
 `;

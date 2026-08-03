@@ -5,14 +5,14 @@ import styled from 'styled-components';
 
 export const ProductReviews = styled.section`
   display: flex;
-  margin: 40px 0;
+  margin: 24px 0 40px;
   align-items: center;
   flex-direction: column;
 `;
 
 export const TitleContainer = styled.div`
   border-top: 1px dashed;
-  padding: 40px 0;
+  padding: 20px 0 16px;
   text-align: center;
   width: 100%;
 `;
@@ -64,6 +64,13 @@ export const AverageScoreBadge = styled.div`
 export const StarRating = styled.span`
   color: ${({ theme }) => theme.colors.otelYellow};
   font-size: 18px;
+  letter-spacing: 1px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  line-height: 1;
 `;
 
 export const ScoreCount = styled.span`
@@ -102,6 +109,8 @@ export const ScoreBarFill = styled.div`
   left: 0;
   top: 0;
   height: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   background: ${({ theme }) => theme.colors.otelBlue};
 `;
 
@@ -117,7 +126,6 @@ export const SummaryText = styled.p`
   line-height: 1.5;
 `;
 
-/* Reviews grid: 1 column mobile, 5 desktop (since there are always 5 reviews) */
 export const ReviewsGrid = styled.ul`
   display: grid;
   width: 100%;
@@ -125,35 +133,61 @@ export const ReviewsGrid = styled.ul`
   margin: 0;
   list-style: none;
   gap: 24px;
-  grid-template-columns: 1fr;
-
-  ${({ theme }) => theme.breakpoints.desktop} {
-    grid-template-columns: repeat(5, 1fr);
-  }
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
 `;
 
 export const ReviewCard = styled.li`
   border: 1px solid ${({ theme }) => theme.colors.borderGray};
   border-radius: 8px;
   background: ${({ theme }) => theme.colors.white};
-  padding: 16px;
+  padding: 14px 16px;
   display: grid;
-  gap: 12px;
+  align-content: start;
+  gap: 10px;
 `;
 
 export const ReviewHeader = styled.div`
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  > div { min-width: 0; }
 `;
 
 export const ReviewerName = styled.strong`
+  display: block;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
-export const ReviewBody = styled.p`
+export const ReviewDate = styled.time`
+  display: block; margin-top: 3px; color: ${({ theme }) => theme.colors.textLightGray}; font-size: 12px;
+`;
+
+export const ReviewBody = styled.p<{ $expanded?: boolean }>`
   margin: 0;
-  line-height: 1.6;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  ${({ $expanded }) => !$expanded && `
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    overflow: hidden;
+  `}
+`;
+
+export const ReadMore = styled.button`
+  width: fit-content; padding: 0; border: 0; background: none; color: ${({ theme }) => theme.colors.otelBlue}; cursor: pointer;
+`;
+
+export const SeeMore = styled.button`
+  margin: 24px auto 0; padding: 10px 22px; border: 1px solid ${({ theme }) => theme.colors.otelBlue};
+  border-radius: 8px; background: white; color: ${({ theme }) => theme.colors.otelBlue}; font-weight: 700; cursor: pointer;
+  &:hover { background: ${({ theme }) => theme.colors.otelBlue}; color: white; }
+  &:disabled { opacity: .6; cursor: wait; }
 `;
 
 export const AskAISection = styled.section`
@@ -252,4 +286,30 @@ export const AIMessage = styled.p`
   margin: 0;
   line-height: 1.5;
   color: ${({ theme }) => theme.colors.otelGray};
+`;
+
+export const ReviewForm = styled.div`
+  width: 100%; display: grid; gap: 10px; margin: 0 20px 24px; padding: 16px 20px;
+  border: 1px solid ${({ theme }) => theme.colors.borderGray}; border-radius: 8px;
+  span { color: #a00020; }
+`;
+
+export const ReviewFormControls = styled.div`
+  display: flex; align-items: stretch; gap: 12px;
+  textarea { flex: 1; min-height: 64px; resize: vertical; padding: 10px; border: 1px solid ${({ theme }) => theme.colors.borderGray}; border-radius: 6px; }
+  > button { min-width: 132px; padding: 8px 14px; border: 0; border-radius: 6px; background: ${({ theme }) => theme.colors.otelBlue}; color: white; cursor: pointer; }
+  > button:disabled { opacity: .55; cursor: not-allowed; }
+  @media (max-width: 760px) { flex-direction: column; }
+`;
+
+export const StarInput = styled.div`
+  display: inline-flex; align-items: center; flex-wrap: nowrap; padding: 0 10px; border: 1px solid ${({ theme }) => theme.colors.borderGray}; border-radius: 6px;
+  button { padding: 4px 2px; border: 0; background: none; color: ${({ theme }) => theme.colors.otelYellow}; font-size: 25px; line-height: 1; cursor: pointer; }
+`;
+
+export const LoginPrompt = styled.p`width: 100%; margin: 0 20px 24px;`;
+
+export const OwnerActions = styled.div`
+  display: flex; gap: 8px; margin-top: 12px;
+  button { border: 0; background: none; color: ${({ theme }) => theme.colors.otelBlue}; cursor: pointer; padding: 0; }
 `;
