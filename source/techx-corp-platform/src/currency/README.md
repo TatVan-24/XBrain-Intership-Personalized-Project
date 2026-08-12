@@ -1,6 +1,13 @@
 # Currency Service
 
 The Currency Service does the conversion from one currency to another.
+
+## Supported currencies and rates
+
+The service uses 151 EUR-based reference rates pinned for deterministic local demos. The snapshot
+comes from the official Banca d'Italia exchange-rate API and is dated 2026-08-10. It includes VND
+at 30,252 dong per EUR. These values are for product demonstration and testing only, not for settling
+real financial transactions. Update `src/currency/src/currency_rates.inc` when a new snapshot is required.
 It is a C++ based service.
 
 ## Building docker image

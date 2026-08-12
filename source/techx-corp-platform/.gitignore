@@ -32,8 +32,21 @@ next-env.d.ts
 /vendor/
 src/quote/vendor/
 .venv
+.cache/
+.pytest_cache/
+.mypy_cache/
 .dockerhub.env
 .ghcr.env
+
+# Local AI training outputs. Keep configs, scripts, and small labeled samples;
+# never commit downloaded model weights, checkpoints, or generated datasets.
+src/llm/fallback/artifacts/
+src/llm/fallback/data/processed/
+src/llm/fallback/data/raw/*.jsonl
+!src/llm/fallback/data/raw/sample.jsonl
+**/checkpoint-*/
+*.safetensors
+*.bin
 
 # Phoenix-generated source assets under src/flagd-ui/assets/vendor are source
 # inputs and intentionally remain trackable.

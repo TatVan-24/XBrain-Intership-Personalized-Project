@@ -3,6 +3,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <map>
 #include <math.h>
 #include <demo.grpc.pb.h>
 #include <grpc/health/v1/health.grpc.pb.h>
@@ -45,41 +46,11 @@ namespace semconv     = opentelemetry::semconv;
 
 namespace
 {
-  std::unordered_map<std::string, double> currency_conversion
+  // Reference rates quoted against EUR. Snapshot: 2026-08-10.
+  // Source: Banca d'Italia official exchange-rate API. Kept static so local runs offline.
+  std::map<std::string, double> currency_conversion
   {
-    {"EUR", 1.0},
-    {"USD", 1.1305},
-    {"JPY", 126.40},
-    {"BGN", 1.9558},
-    {"CZK", 25.592},
-    {"DKK", 7.4609},
-    {"GBP", 0.85970},
-    {"HUF", 315.51},
-    {"PLN", 4.2996},
-    {"RON", 4.7463},
-    {"SEK", 10.5375},
-    {"CHF", 1.1360},
-    {"ISK", 136.80},
-    {"NOK", 9.8040},
-    {"HRK", 7.4210},
-    {"RUB", 74.4208},
-    {"TRY", 6.1247},
-    {"AUD", 1.6072},
-    {"BRL", 4.2682},
-    {"CAD", 1.5128},
-    {"CNY", 7.5857},
-    {"HKD", 8.8743},
-    {"IDR", 15999.40},
-    {"ILS", 4.0875},
-    {"INR", 79.4320},
-    {"KRW", 1275.05},
-    {"MXN", 21.7999},
-    {"MYR", 4.6289},
-    {"NZD", 1.6679},
-    {"PHP", 59.083},
-    {"SGD", 1.5349},
-    {"THB", 36.012},
-    {"ZAR", 16.0583},
+#include "currency_rates.inc"
   };
 
   std::string version = std::getenv("VERSION"); 
@@ -192,13 +163,22 @@ class CurrencyService final : public oteldemo::CurrencyService::Service
       // Do the conversion work
       Money from = request->from();
       string from_code = from.currency_code();
-      double rate = currency_conversion[from_code];
+      auto from_rate = currency_conversion.find(from_code);
+      string to_code = request->to_code();
+      auto to_rate = currency_conversion.find(to_code);
+      if (from_rate == currency_conversion.end() || to_rate == currency_conversion.end()) {
+        span->AddEvent("Unsupported currency code");
+        span->SetStatus(StatusCode::kError, "Unsupported currency code");
+        span->End();
+        return Status(grpc::StatusCode::INVALID_ARGUMENT, "Unsupported currency code");
+      }
+
+      double rate = from_rate->second;
       double one_euro = getDouble(from) / rate ;
 
-      string to_code = request->to_code();
-      double to_rate = currency_conversion[to_code];
+      double target_rate = to_rate->second;
 
-      double final = one_euro * to_rate;
+      double final = one_euro * target_rate;
       getUnitsAndNanos(*response, final);
       response->set_currency_code(to_code);
 
