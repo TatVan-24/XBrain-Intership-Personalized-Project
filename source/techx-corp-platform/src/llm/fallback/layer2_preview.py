@@ -199,9 +199,13 @@ if __name__ == "__main__":
     })
 
     package = build_prompt(
+        # request_id="req-123",
+        # guardrail_result=layer1_result,
+        # current_review_version="v43",
         request_id="req-123",
         guardrail_result=layer1_result,
-        current_review_version="v43",
+        current_review_version="v42",
+        max_input_characters=10,
     )
 
     print(json.dumps(
