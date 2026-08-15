@@ -1,0 +1,315 @@
+{
+  "schema_version": 1,
+  "evaluation": "t5-small-untuned-layer4-regression",
+  "model": "google-t5/t5-small",
+  "case_count": 10,
+  "aggregate": {
+    "decision_counts": {
+      "reject": 10
+    },
+    "next_action_counts": {
+      "abstain": 10
+    },
+    "violation_counts": {
+      "MODEL_FORMAT_LEAK": 10
+    },
+    "warning_counts": {
+      "EXACT_QUOTE_DETECTED": 9,
+      "EXCESSIVE_EXTRACTIVE_COPY": 2
+    },
+    "format_leak_recall_on_known_baseline": 1.0,
+    "unsafe_summary_returned_count": 0,
+    "expected_behavior_passed": true
+  },
+  "results": [
+    {
+      "case_id": "27b124ec40f8",
+      "product_id": "HQTGWGPNH4",
+      "prediction": "review=5.0; review=A fascinating glimpse into historical astronomical thought. the content is incredibly insightful. a must-read for anyone interested in the history of science. | rating=4.5; review=A truly special book for enthusiasts of astronomical history.",
+      "decision": "reject",
+      "next_action": "abstain",
+      "violations": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "warnings": [
+        "EXACT_QUOTE_DETECTED"
+      ],
+      "exact_quote_matches": [
+        {
+          "review_id": "46",
+          "quote": "a fascinating glimpse into historical astronomical thought the content is incredibly insightful a must-read for anyone interested in the history of science",
+          "word_count": 22
+        },
+        {
+          "review_id": "50",
+          "quote": "a truly special book for enthusiasts of astronomical history",
+          "word_count": 9
+        }
+      ],
+      "safe_response": {
+        "status": "unavailable",
+        "summary": null,
+        "source_review_ids": [],
+        "model": "google-t5/t5-small",
+        "degraded": true
+      }
+    },
+    {
+      "case_id": "2c84dfd49668",
+      "product_id": "66VCHSJNUP",
+      "prediction": "rating=4.5; review=Fantastic product, the app truly guides you. it's like having a personal astronomer with you. the optical quality is also very good.",
+      "decision": "reject",
+      "next_action": "abstain",
+      "violations": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "warnings": [
+        "EXACT_QUOTE_DETECTED",
+        "EXCESSIVE_EXTRACTIVE_COPY"
+      ],
+      "exact_quote_matches": [
+        {
+          "review_id": "10",
+          "quote": "fantastic product the app truly guides you it's like having a personal astronomer with you the optical quality is also very good",
+          "word_count": 22
+        }
+      ],
+      "safe_response": {
+        "status": "unavailable",
+        "summary": null,
+        "source_review_ids": [],
+        "model": "google-t5/t5-small",
+        "degraded": true
+      }
+    },
+    {
+      "case_id": "4aa5cd87cd80",
+      "product_id": "0PUK6V6EV0",
+      "prediction": "the color quality is superb. Easy to use with my existing telescope setup. | rating=4.5; review=Finally capturing stunning images of Saturn and Jupiter!",
+      "decision": "reject",
+      "next_action": "abstain",
+      "violations": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "warnings": [
+        "EXACT_QUOTE_DETECTED"
+      ],
+      "exact_quote_matches": [
+        {
+          "review_id": "26",
+          "quote": "the color quality is superb easy to use with my existing telescope setup",
+          "word_count": 13
+        },
+        {
+          "review_id": "27",
+          "quote": "finally capturing stunning images of saturn and jupiter",
+          "word_count": 8
+        }
+      ],
+      "safe_response": {
+        "status": "unavailable",
+        "summary": null,
+        "source_review_ids": [],
+        "model": "google-t5/t5-small",
+        "degraded": true
+      }
+    },
+    {
+      "case_id": "55251c891edc",
+      "product_id": "2ZYFJ3GM2N",
+      "prediction": "the ED glass really makes a difference. I can spot the subtlest markings. | rating=4.5; review=These binoculars are fantastic for nature observation.",
+      "decision": "reject",
+      "next_action": "abstain",
+      "violations": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "warnings": [
+        "EXACT_QUOTE_DETECTED"
+      ],
+      "exact_quote_matches": [
+        {
+          "review_id": "21",
+          "quote": "the ed glass really makes a difference i can spot the subtlest markings",
+          "word_count": 13
+        },
+        {
+          "review_id": "22",
+          "quote": "these binoculars are fantastic for nature observation",
+          "word_count": 7
+        }
+      ],
+      "safe_response": {
+        "status": "unavailable",
+        "summary": null,
+        "source_review_ids": [],
+        "model": "google-t5/t5-small",
+        "degraded": true
+      }
+    },
+    {
+      "case_id": "55a5715fe935",
+      "product_id": "LS4PSXUNUM",
+      "prediction": "the hand warmer is an unexpected bonus. Very practical device. | rating=4.5; review=This flashlight is indispensable for star parties. the red mode is gentle on the eyes, and the power bank feature is super handy.",
+      "decision": "reject",
+      "next_action": "abstain",
+      "violations": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "warnings": [
+        "EXACT_QUOTE_DETECTED"
+      ],
+      "exact_quote_matches": [
+        {
+          "review_id": "31",
+          "quote": "the hand warmer is an unexpected bonus very practical device",
+          "word_count": 10
+        },
+        {
+          "review_id": "32",
+          "quote": "this flashlight is indispensable for star parties the red mode is gentle on the eyes and the power bank feature is super handy",
+          "word_count": 23
+        }
+      ],
+      "safe_response": {
+        "status": "unavailable",
+        "summary": null,
+        "source_review_ids": [],
+        "model": "google-t5/t5-small",
+        "degraded": true
+      }
+    },
+    {
+      "case_id": "5b4e05c5aebd",
+      "product_id": "6E92ZMYYFZ",
+      "prediction": "rating=5.0; review=Essential for safe solar viewing with my 8-inch telescope. the Velcro straps ensure it stays securely in place.",
+      "decision": "reject",
+      "next_action": "abstain",
+      "violations": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "warnings": [
+        "EXACT_QUOTE_DETECTED",
+        "EXCESSIVE_EXTRACTIVE_COPY"
+      ],
+      "exact_quote_matches": [
+        {
+          "review_id": "41",
+          "quote": "essential for safe solar viewing with my 8-inch telescope the velcro straps ensure it stays securely in place",
+          "word_count": 18
+        }
+      ],
+      "safe_response": {
+        "status": "unavailable",
+        "summary": null,
+        "source_review_ids": [],
+        "model": "google-t5/t5-small",
+        "degraded": true
+      }
+    },
+    {
+      "case_id": "690be5bcbba4",
+      "product_id": "1YMWWN1N4O",
+      "prediction": "the solar Safe filter gives peace of mind. I used it for the last partial eclipse and it was fantastic. | rating=4.5; review=Compact and easy to carry.",
+      "decision": "reject",
+      "next_action": "abstain",
+      "violations": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "warnings": [
+        "EXACT_QUOTE_DETECTED"
+      ],
+      "exact_quote_matches": [
+        {
+          "review_id": "11",
+          "quote": "the solar safe filter gives peace of mind i used it for the last partial eclipse and it was fantastic",
+          "word_count": 20
+        }
+      ],
+      "safe_response": {
+        "status": "unavailable",
+        "summary": null,
+        "source_review_ids": [],
+        "model": "google-t5/t5-small",
+        "degraded": true
+      }
+    },
+    {
+      "case_id": "75524204d564",
+      "product_id": "9SIQT8TOJO",
+      "prediction": "the f/2.2 speed drastically cuts down exposure times. my best astrophotography investment yet. | rating=5.0; review=Unbelievable performance for wide-field astrophotography.",
+      "decision": "reject",
+      "next_action": "abstain",
+      "violations": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "warnings": [
+        "EXACT_QUOTE_DETECTED"
+      ],
+      "exact_quote_matches": [
+        {
+          "review_id": "36",
+          "quote": "the f 2 2 speed drastically cuts down exposure times my best astrophotography investment yet",
+          "word_count": 15
+        }
+      ],
+      "safe_response": {
+        "status": "unavailable",
+        "summary": null,
+        "source_review_ids": [],
+        "model": "google-t5/t5-small",
+        "degraded": true
+      }
+    },
+    {
+      "case_id": "b75344de0bd6",
+      "product_id": "L9ECAV7KIM",
+      "prediction": "a versatile cleaning kit. | rating=5.0; review=Great value for money. Keeps my expensive equipment inpristine condition.",
+      "decision": "reject",
+      "next_action": "abstain",
+      "violations": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "warnings": [],
+      "exact_quote_matches": [],
+      "safe_response": {
+        "status": "unavailable",
+        "summary": null,
+        "source_review_ids": [],
+        "model": "google-t5/t5-small",
+        "degraded": true
+      }
+    },
+    {
+      "case_id": "c2b34adb2be6",
+      "product_id": "OLJCESPC7Z",
+      "prediction": "a great entry-level telescope! Easy to set up and provides clear views of the moon and brighter planets. Highly recommend for new astronomers. | rating=4.5; review=For the price, this Explorascope delivers excellent performance.",
+      "decision": "reject",
+      "next_action": "abstain",
+      "violations": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "warnings": [
+        "EXACT_QUOTE_DETECTED"
+      ],
+      "exact_quote_matches": [
+        {
+          "review_id": "1",
+          "quote": "great entry-level telescope easy to set up and provides clear views of the moon and brighter planets highly recommend for new astronomers",
+          "word_count": 22
+        },
+        {
+          "review_id": "2",
+          "quote": "for the price this explorascope delivers excellent performance",
+          "word_count": 8
+        }
+      ],
+      "safe_response": {
+        "status": "unavailable",
+        "summary": null,
+        "source_review_ids": [],
+        "model": "google-t5/t5-small",
+        "degraded": true
+      }
+    }
+  ]
+}

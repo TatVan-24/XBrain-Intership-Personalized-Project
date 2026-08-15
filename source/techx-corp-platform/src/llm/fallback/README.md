@@ -28,6 +28,47 @@ python -m fallback.prepare_dataset `
 
 The sample only tests the pipeline; it is not sufficient training data.
 
+Export a privacy-minimized snapshot from the running PostgreSQL instance. Use
+`localhost` when the script runs on the host; never commit the DSN or generated
+raw export:
+
+```powershell
+$env:REVIEW_EXPORT_DSN='postgresql://otelu:<local-password>@localhost:<port>/otel'
+python -m fallback.export_reviews `
+  --output fallback/data/raw/reviews-export.jsonl
+```
+
+The export intentionally excludes `username` and `user_id`, computes an
+immutable `review_version`, and reports seed/duplicate counts. Fill `summary`
+and change `label_status` to `human_approved` only after reviewing the label.
+
+Create a compact labeling batch. Existing mock summaries are copied only into
+`draft_summary`; they are never marked approved automatically:
+
+```powershell
+python -m fallback.create_labeling_batch `
+  --input fallback/data/raw/reviews-export.jsonl `
+  --draft-summaries product-review-summaries/product-review-summaries.json `
+  --output fallback/data/raw/pilot-labeling.jsonl
+```
+
+For every product, compare `draft_summary` strictly against the unique review
+texts. Copy a corrected version into `summary`, add reviewer notes, and set
+`label_status=human_approved`. Do not approve claims supported only by product
+descriptions rather than reviews.
+
+Build the frozen, non-training evaluation artifact:
+
+```powershell
+python -m fallback.build_eval_set `
+  --input fallback/data/raw/human-approved-eval.jsonl `
+  --output fallback/data/eval/cases.jsonl `
+  --manifest fallback/data/eval/manifest.json
+```
+
+The builder rejects unapproved labels, PII in reference summaries, duplicate
+product IDs, and identical review corpora assigned to different products.
+
 ## Fine-tune on a GTX 1650-class laptop
 
 Install a CUDA-compatible PyTorch build, then `requirements-train.txt`. The

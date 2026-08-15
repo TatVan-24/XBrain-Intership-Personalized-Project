@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Literal
 
 
 @dataclass(frozen=True)
@@ -46,16 +46,64 @@ class SummaryRequest:
 
 @dataclass(frozen=True)
 class SummaryResponse:
-    summary: str
+    status: Literal["completed", "unavailable"]
+    summary: str | None
     source_review_ids: tuple[str, ...]
     model_source: str
     model_version: str
     review_version: str
     degraded: bool = True
+    validation_codes: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.status not in {"completed", "unavailable"}:
+            raise ValueError("Unsupported summary response status")
+
+        if not self.model_source.strip():
+            raise ValueError("model_source is required")
+
+        if not self.model_version.strip():
+            raise ValueError("model_version is required")
+
+        if not self.review_version.strip():
+            raise ValueError("review_version is required")
+
+        if self.status == "completed":
+            if self.summary is None or not self.summary.strip():
+                raise ValueError(
+                    "completed response requires a non-empty summary"
+                )
+
+            if not self.source_review_ids:
+                raise ValueError(
+                    "completed response requires source_review_ids"
+                )
+
+            if self.validation_codes:
+                raise ValueError(
+                    "completed response cannot contain blocking validation codes"
+                )
+
+        if self.status == "unavailable":
+            if self.summary is not None:
+                raise ValueError(
+                    "unavailable response requires summary=None"
+                )
+
+            if self.source_review_ids:
+                raise ValueError(
+                    "unavailable response cannot expose source_review_ids"
+                )
+
+            if not self.validation_codes:
+                raise ValueError(
+                    "unavailable response requires validation_codes"
+                )
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
         result["source_review_ids"] = list(self.source_review_ids)
+        result["validation_codes"] = list(self.validation_codes)
         return result
 
 

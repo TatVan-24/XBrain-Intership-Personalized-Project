@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "case_count": 10,
+  "category_counts": {
+    "faithfulness": 10
+  },
+  "excluded_seed_reviews": 80,
+  "source_sha256": "80a8e79b2afe6139457fffa2655fe8e1789568d1c58d984a8116ecbd9b6f5441",
+  "policy": "human-approved labels and natural reviews only; never use this output for training"
+}

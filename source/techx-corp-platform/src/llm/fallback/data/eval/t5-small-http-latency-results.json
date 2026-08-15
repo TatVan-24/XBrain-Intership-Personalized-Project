@@ -1,0 +1,436 @@
+{
+  "schema_version": 1,
+  "evaluation": "t5-small-base-http-warm-latency",
+  "endpoint": "http://127.0.0.1:8010/v1/summaries",
+  "aggregate": {
+    "warmup_request_count": 3,
+    "measured_request_count": 30,
+    "http_status_counts": {
+      "200": 30
+    },
+    "response_status_counts": {
+      "unavailable": 30
+    },
+    "validation_code_counts": {
+      "MODEL_FORMAT_LEAK": 30
+    },
+    "server_latency_ms": {
+      "min": 439.39,
+      "p50": 473.21,
+      "p95": 518.59,
+      "max": 534.29,
+      "mean": 478.56
+    },
+    "client_latency_ms": {
+      "min": 442.1,
+      "p50": 486.28,
+      "p95": 532.7,
+      "max": 548.04,
+      "mean": 491.0
+    },
+    "unsafe_summary_returned_count": 0,
+    "safety_passed": true,
+    "p95_target_ms": 1500.0,
+    "latency_target_passed": true
+  },
+  "warmups": [
+    {
+      "sequence": 1,
+      "http_status": 200,
+      "client_latency_ms": 643.6,
+      "server_latency_ms": 613.11,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 2,
+      "http_status": 200,
+      "client_latency_ms": 575.86,
+      "server_latency_ms": 563.27,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 3,
+      "http_status": 200,
+      "client_latency_ms": 513.48,
+      "server_latency_ms": 510.59,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    }
+  ],
+  "results": [
+    {
+      "sequence": 4,
+      "http_status": 200,
+      "client_latency_ms": 490.3,
+      "server_latency_ms": 487.65,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 5,
+      "http_status": 200,
+      "client_latency_ms": 548.04,
+      "server_latency_ms": 534.29,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 6,
+      "http_status": 200,
+      "client_latency_ms": 521.84,
+      "server_latency_ms": 518.59,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 7,
+      "http_status": 200,
+      "client_latency_ms": 508.36,
+      "server_latency_ms": 486.15,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 8,
+      "http_status": 200,
+      "client_latency_ms": 513.38,
+      "server_latency_ms": 502.65,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 9,
+      "http_status": 200,
+      "client_latency_ms": 513.12,
+      "server_latency_ms": 492.3,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 10,
+      "http_status": 200,
+      "client_latency_ms": 478.63,
+      "server_latency_ms": 467.88,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 11,
+      "http_status": 200,
+      "client_latency_ms": 453.72,
+      "server_latency_ms": 451.13,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 12,
+      "http_status": 200,
+      "client_latency_ms": 512.95,
+      "server_latency_ms": 492.39,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 13,
+      "http_status": 200,
+      "client_latency_ms": 463.7,
+      "server_latency_ms": 460.84,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 14,
+      "http_status": 200,
+      "client_latency_ms": 471.65,
+      "server_latency_ms": 447.56,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 15,
+      "http_status": 200,
+      "client_latency_ms": 454.19,
+      "server_latency_ms": 441.08,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 16,
+      "http_status": 200,
+      "client_latency_ms": 468.21,
+      "server_latency_ms": 444.53,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 17,
+      "http_status": 200,
+      "client_latency_ms": 442.1,
+      "server_latency_ms": 439.39,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 18,
+      "http_status": 200,
+      "client_latency_ms": 475.35,
+      "server_latency_ms": 472.52,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 19,
+      "http_status": 200,
+      "client_latency_ms": 469.92,
+      "server_latency_ms": 455.41,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 20,
+      "http_status": 200,
+      "client_latency_ms": 499.42,
+      "server_latency_ms": 483.45,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 21,
+      "http_status": 200,
+      "client_latency_ms": 486.28,
+      "server_latency_ms": 473.21,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 22,
+      "http_status": 200,
+      "client_latency_ms": 507.67,
+      "server_latency_ms": 492.6,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 23,
+      "http_status": 200,
+      "client_latency_ms": 473.66,
+      "server_latency_ms": 453.19,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 24,
+      "http_status": 200,
+      "client_latency_ms": 532.7,
+      "server_latency_ms": 517.56,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 25,
+      "http_status": 200,
+      "client_latency_ms": 525.3,
+      "server_latency_ms": 509.67,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 26,
+      "http_status": 200,
+      "client_latency_ms": 475.78,
+      "server_latency_ms": 472.11,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 27,
+      "http_status": 200,
+      "client_latency_ms": 475.98,
+      "server_latency_ms": 466.14,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 28,
+      "http_status": 200,
+      "client_latency_ms": 467.27,
+      "server_latency_ms": 445.46,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 29,
+      "http_status": 200,
+      "client_latency_ms": 531.49,
+      "server_latency_ms": 513.31,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 30,
+      "http_status": 200,
+      "client_latency_ms": 498.51,
+      "server_latency_ms": 495.78,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 31,
+      "http_status": 200,
+      "client_latency_ms": 492.26,
+      "server_latency_ms": 489.55,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 32,
+      "http_status": 200,
+      "client_latency_ms": 497.96,
+      "server_latency_ms": 482.58,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    },
+    {
+      "sequence": 33,
+      "http_status": 200,
+      "client_latency_ms": 480.33,
+      "server_latency_ms": 467.82,
+      "status": "unavailable",
+      "summary_is_null": true,
+      "validation_codes": [
+        "MODEL_FORMAT_LEAK"
+      ],
+      "model_version": "google-t5-t5-small-untuned"
+    }
+  ]
+}

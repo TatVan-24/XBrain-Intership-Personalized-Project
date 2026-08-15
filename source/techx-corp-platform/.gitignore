@@ -44,6 +44,7 @@ src/llm/fallback/artifacts/
 src/llm/fallback/data/processed/
 src/llm/fallback/data/raw/*.jsonl
 !src/llm/fallback/data/raw/sample.jsonl
+src/llm/fallback/data/raw/*.json
 **/checkpoint-*/
 *.safetensors
 *.bin
