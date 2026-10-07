@@ -22,3 +22,40 @@ src/*/*/Dockerfile
 ./src/shipping/target
 ###################################
 
+###################################
+# llm fallback artifacts
+###################################
+src/llm/fallback/.venv/
+src/llm/fallback/artifacts/
+src/llm/fallback/__pycache__/
+src/llm/fallback/**/__pycache__/
+src/llm/fallback/.pytest_cache/
+src/llm/fallback/data/raw/
+src/llm/fallback/data/processed/
+src/llm/fallback/data/eval/t5-small-baseline-results.json
+
+###################################
+# general noise
+###################################
+**/__pycache__/
+**/*.pyc
+**/.venv/
+**/venv/
+
+###################################
+# Python build artifacts
+**/.venv/
+**/venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+
+###################################
+# Fallback artifacts & generated data
+src/llm/fallback/artifacts/
+src/llm/fallback/data/raw/
+src/llm/fallback/data/processed/

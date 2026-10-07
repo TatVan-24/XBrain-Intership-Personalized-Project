@@ -21,6 +21,8 @@ WORKDIR /app
 COPY ./src/llm/app.py app.py
 COPY ./src/llm/product-review-summaries/product-review-summaries.json product-review-summaries.json
 COPY ./src/llm/product-review-summaries/inaccurate-product-review-summaries.json inaccurate-product-review-summaries.json
+COPY src/llm/fallback/ /app/fallback/
+
 
 EXPOSE ${LLM_PORT}
 ENTRYPOINT [ "/venv/bin/python", "app.py" ]
