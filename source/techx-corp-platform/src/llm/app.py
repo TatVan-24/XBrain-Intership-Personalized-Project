@@ -33,7 +33,7 @@ if os.path.isdir(_FALLBACK_DIR):
 
 try:
     from guardrails import inspect_request  # Layer 1
-    from prompt_builder import build_prompt, PromptBuildError  # Layer 2
+    from prompt_builder import build_prompt, PromptBuildError, build_qa_prompt  # Layer 2
     from output_guardrails import (  # Layer 4
         Layer4Input,
         Review as GuardrailReview,
@@ -216,6 +216,53 @@ def extract_summary_from_llm_output(content):
                 return summary.strip()
     return text
 
+
+def classify_task(messages):
+    last = str(messages[-1].get("content", ""))
+    if "Can you summarize the product reviews?" in last:
+        return "summary"
+    if "answer the original question about product ID" in last:
+        return "qa"
+    return "unknown"
+
+
+def extract_qa_answer(content):
+    """Parse QA response. Returns (status, answer, source_ids).
+    status: "answered" | "unavailable" | "unparsed"
+    """
+    text = content.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*\n?", "", text)
+        text = re.sub(r"\n?```\s*$", "", text).strip()
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return ("unparsed", text, ())
+    if not isinstance(parsed, dict):
+        return ("unparsed", text, ())
+    status = parsed.get("status")
+    if status == "unavailable":
+        return ("unavailable", None, ())
+    if status == "answered":
+        answer = parsed.get("answer") or ""
+        ids = tuple(parsed.get("source_review_ids") or [])
+        return ("answered", answer, ids)
+    return ("unparsed", text, ())
+
+
+def extract_original_question(messages):
+    """Extract user's real question if present in a message.
+    Returns None if this is a plain summary request.
+    """
+    for msg in reversed(messages):
+        if msg.get("role") != "user":
+            continue
+        content = str(msg.get("content", ""))
+        m = re.search(r"Question:\s*(.+?)(?:\n|$)", content)
+        if m:
+            return m.group(1).strip()
+    return None
+
 def parse_product_id(last_message):
     m = re.search(r"product ID:([A-Z0-9]+)", last_message)
     if m:
@@ -231,7 +278,7 @@ def generate_mock_response(product_id):
         return inaccurate_product_review_summaries.get(product_id)
     return product_review_summaries.get(product_id)
 
-def generate_summary_via_groq(product_id, messages):
+def handle_summary(product_id, messages):
     """
     Returns:
       {"status":"completed","summary":..,"model":..,"source_review_ids":[..]}
@@ -278,6 +325,7 @@ def generate_summary_via_groq(product_id, messages):
     # Groq with model failover
     try:
         content, model_id, attempts = call_groq_chain(openai_messages)
+        app.logger.info(f"RAW GROQ CONTENT: {content[:500]}")
         app.logger.info(f"groq_attempts: {attempts} winner: {model_id}")
     except GroqCallError as e:
         app.logger.warning(f"groq_all_failed: {e.reason}")
@@ -307,6 +355,7 @@ def generate_summary_via_groq(product_id, messages):
             source_review_ids=prompt_pkg.source_review_ids,
             reviews=guardrail_reviews,
             degraded=layer1.degraded,
+            task_type="summary"
         )
     )
 
@@ -320,6 +369,95 @@ def generate_summary_via_groq(product_id, messages):
         "model": model_id,
         "source_review_ids": list(prompt_pkg.source_review_ids),
         "degraded": layer1.degraded,
+    }
+
+
+def handle_qa(product_id, messages):
+    """QA path — different prompt + adherence check + no mock fallback."""
+    if not _GUARDRAILS_AVAILABLE:
+        return {"status": "unavailable", "reason": "guardrails_unavailable", "model": "guardrail"}
+
+    reviews = extract_reviews_from_messages(messages)
+    if not reviews:
+        return {"status": "unavailable", "reason": "no_reviews", "model": "guardrail"}
+
+    question = extract_original_question(messages)
+    if not question:
+        return {"status": "unavailable", "reason": "no_question", "model": "guardrail"}
+
+    try:
+        layer1 = inspect_request({
+            "product_id": product_id,
+            "review_version": f"m6-{int(time.time())}",
+            "reviews": reviews,
+        })
+    except ValueError as e:
+        app.logger.warning(f"qa layer1_invalid: {e}")
+        return {"status": "unavailable", "reason": "input_invalid", "model": "guardrail"}
+
+    if layer1.decision != "continue":
+        app.logger.info("qa layer1_abstain")
+        return {"status": "unavailable", "reason": "all_reviews_quarantined", "model": "guardrail"}
+
+    try:
+        prompt_pkg = build_qa_prompt(
+            request_id=f"req-{int(time.time() * 1000)}",
+            guardrail_result=layer1,
+            current_review_version=layer1.review_version,
+            question=question,
+        )
+    except PromptBuildError as e:
+        app.logger.warning(f"qa layer2_failed: {e.reason_code}")
+        return {"status": "unavailable", "reason": e.reason_code, "model": "guardrail"}
+
+    openai_messages = [{"role": m.role, "content": m.content} for m in prompt_pkg.messages]
+
+    try:
+        content, model_id, attempts = call_groq_chain(openai_messages)
+        app.logger.info(f"qa groq_attempts: {attempts} winner: {model_id}")
+    except GroqCallError as e:
+        app.logger.warning(f"qa groq_all_failed: {e.reason}")
+        return {"status": "unavailable", "reason": "groq_unavailable", "model": "guardrail"}
+
+    app.logger.info(f"RAW QA CONTENT: {content[:500]}")
+
+    qa_status, answer, source_ids = extract_qa_answer(content)
+
+    if qa_status == "unavailable":
+        return {"status": "unavailable", "reason": "insufficient_evidence", "model": model_id}
+    if qa_status == "unparsed":
+        answer = content  # backward compat, still validate below
+    if not answer or not answer.strip():
+        return {"status": "unavailable", "reason": "empty_answer", "model": model_id}
+
+    guardrail_reviews = tuple(
+        GuardrailReview(review_id=r.review_id, text=r.sanitized_text, score=r.score)
+        for r in layer1.safe_reviews
+    )
+    validation = validate_candidate(
+        Layer4Input(
+            request_id=prompt_pkg.request_id,
+            product_id=product_id,
+            review_version=layer1.review_version,
+            candidate_role="primary",
+            model=model_id,
+            summary=answer,
+            source_review_ids=prompt_pkg.source_review_ids,
+            reviews=guardrail_reviews,
+            degraded=layer1.degraded,
+            task_type="qa",
+            question=question,
+        )
+    )
+    if validation.decision == "reject":
+        app.logger.warning(f"qa layer4_reject: {validation.violations}")
+        return {"status": "unavailable", "reason": "qa_not_adherent", "model": model_id}
+
+    return {
+        "status": "completed",
+        "summary": answer,
+        "model": model_id,
+        "source_review_ids": list(source_ids) or list(prompt_pkg.source_review_ids),
     }
 
 
@@ -397,25 +535,43 @@ def chat_completions():
             },
         })
 
-    # Summary path with Groq
-    groq_result = generate_summary_via_groq(product_id, messages)
+        # Task routing (task-first pattern)
+    task = classify_task(messages)
 
-    if groq_result and groq_result["status"] == "completed":
-        return build_response(model, messages, groq_result["summary"], model_name=groq_result["model"])
+    if task == "summary":
+        result = handle_summary(product_id, messages)
+        if result and result["status"] == "completed":
+            return build_response(model, messages, result["summary"], model_name=result["model"])
+        if result and result["status"] == "unavailable":
+            reason = result.get("reason")
+            if reason in ("all_reviews_quarantined", "input_invalid"):
+                return build_response(
+                    model, messages,
+                    "I don't have enough information to summarize this product.",
+                    model_name=result.get("model", "guardrail"),
+                )
+            if reason == "llm_abstained":
+                return build_response(
+                    model, messages,
+                    "I don't have enough information to answer from the provided reviews.",
+                    model_name=result.get("model", "groq"),
+                )
+        # mock fallback only for summary
+        response_text = generate_mock_response(product_id) or "Summary temporarily unavailable."
+        return build_response(model, messages, response_text, model_name="mock-fallback")
 
-    if groq_result and groq_result["status"] == "unavailable":
-        reason = groq_result.get("reason")
-        if reason in ("all_reviews_quarantined", "input_invalid"):
-            # Honest abstain visible to caller
-            return build_response(model, messages,
-                "I don't have enough information to summarize this product.",
-                model_name=groq_result.get("model", "guardrail"))
-        # e.g. llm_abstained -> treat as fall-through to mock
-        # (keep product page usable)
+    if task == "qa":
+        result = handle_qa(product_id, messages)
+        if result["status"] == "completed":
+            return build_response(model, messages, result["summary"], model_name=result["model"])
+        # QA never uses mock — always honest abstain
+        return build_response(
+            model, messages,
+            "I don't have enough information to answer from the provided reviews.",
+            model_name=result.get("model", "guardrail"),
+        )
 
-    # Mock fallback
-    response_text = generate_mock_response(product_id) or "Summary temporarily unavailable."
-    return build_response(model, messages, response_text, model_name="mock-fallback")
+    return build_response(model, messages, "Sorry, I'm not able to answer that question.")
 
 
 @app.route("/v1/models", methods=["GET"])
@@ -451,168 +607,168 @@ if __name__ == "__main__":
 
 
 
-def generate_response(product_id):
+# def generate_response(product_id):
 
-    """Generate a response by providing the pre-generated summary for the specified product"""
-    product_review_summary = None
+#     """Generate a response by providing the pre-generated summary for the specified product"""
+#     product_review_summary = None
 
-    llm_inaccurate_response = check_feature_flag("llmInaccurateResponse")
-    app.logger.info(f"llmInaccurateResponse feature flag: {llm_inaccurate_response}")
-    if llm_inaccurate_response and product_id == "L9ECAV7KIM":
-        app.logger.info(f"Returning an inaccurate response for product_id: {product_id}")
-        product_review_summary = inaccurate_product_review_summaries.get(product_id)
-    else:
-        product_review_summary = product_review_summaries.get(product_id)
+#     llm_inaccurate_response = check_feature_flag("llmInaccurateResponse")
+#     app.logger.info(f"llmInaccurateResponse feature flag: {llm_inaccurate_response}")
+#     if llm_inaccurate_response and product_id == "L9ECAV7KIM":
+#         app.logger.info(f"Returning an inaccurate response for product_id: {product_id}")
+#         product_review_summary = inaccurate_product_review_summaries.get(product_id)
+#     else:
+#         product_review_summary = product_review_summaries.get(product_id)
 
-    app.logger.info(f"product_review_summary is: {product_review_summary}")
+#     app.logger.info(f"product_review_summary is: {product_review_summary}")
 
-    return product_review_summary
+#     return product_review_summary
 
-def parse_product_id(last_message):
-    match = re.search(r"product ID:([A-Z0-9]+)", last_message)
-    if match:
-        return match.group(1).strip()
+# def parse_product_id(last_message):
+#     match = re.search(r"product ID:([A-Z0-9]+)", last_message)
+#     if match:
+#         return match.group(1).strip()
 
-    match = re.search(r"product ID, but make the answer inaccurate:([A-Z0-9]+)", last_message)
-    if match:
-        return match.group(1).strip()
+#     match = re.search(r"product ID, but make the answer inaccurate:([A-Z0-9]+)", last_message)
+#     if match:
+#         return match.group(1).strip()
 
-    raise ValueError("product ID not found in input message")
+#     raise ValueError("product ID not found in input message")
 
-@app.route('/v1/chat/completions', methods=['POST'])
-def chat_completions():
-    data = request.json
-    messages = data.get('messages', [])
-    stream = data.get('stream', False)
-    model = data.get('model', 'techx-llm')
-    tools = data.get('tools', None)
+# @app.route('/v1/chat/completions', methods=['POST'])
+# def chat_completions():
+#     data = request.json
+#     messages = data.get('messages', [])
+#     stream = data.get('stream', False)
+#     model = data.get('model', 'techx-llm')
+#     tools = data.get('tools', None)
 
-    app.logger.info(f"Received a chat completion request: '{messages}'")
+#     app.logger.info(f"Received a chat completion request: '{messages}'")
 
-    last_message = messages[-1]["content"]
+#     last_message = messages[-1]["content"]
 
-    app.logger.info(f"last_message is: '{last_message}'")
+#     app.logger.info(f"last_message is: '{last_message}'")
 
-    if 'What age(s) is this recommended for?' in last_message:
-        response_text = 'This product is recommended for ages 7 and above.'
-        return build_response(model, messages, response_text)
-    elif 'Were there any negative reviews?' in last_message:
-        response_text = 'No, there were no reviews less than three stars for this product.'
-        return build_response(model, messages, response_text)
-    elif not ('Can you summarize the product reviews?' in last_message or 'Based on the tool results, answer the original question about product ID' in last_message):
-        response_text = 'Sorry, I\'m not able to answer that question.'
-        return build_response(model, messages, response_text)
+#     if 'What age(s) is this recommended for?' in last_message:
+#         response_text = 'This product is recommended for ages 7 and above.'
+#         return build_response(model, messages, response_text)
+#     elif 'Were there any negative reviews?' in last_message:
+#         response_text = 'No, there were no reviews less than three stars for this product.'
+#         return build_response(model, messages, response_text)
+#     elif not ('Can you summarize the product reviews?' in last_message or 'Based on the tool results, answer the original question about product ID' in last_message):
+#         response_text = 'Sorry, I\'m not able to answer that question.'
+#         return build_response(model, messages, response_text)
 
-    # otherwise, process the product review summary
-    product_id = parse_product_id(last_message)
+#     # otherwise, process the product review summary
+#     product_id = parse_product_id(last_message)
 
-    if tools is not None:
+#     if tools is not None:
 
-        tool_args = f"{{\"product_id\": \"{product_id}\"}}"
+#         tool_args = f"{{\"product_id\": \"{product_id}\"}}"
 
-        app.logger.info(f"Processing a tool call with args: '{tool_args}'")
+#         app.logger.info(f"Processing a tool call with args: '{tool_args}'")
 
-        app.logger.info(f"The model is: {model}")
-        if model.endswith("rate-limit"):
-            app.logger.info(f"Returning a rate limit error")
-            response = {
-                "error": {
-                    "message": "Rate limit reached. Please try again later.",
-                    "type": "rate_limit_exceeded",
-                    "param": "null",
-                    "code": "null"
-                }
-            }
-            return jsonify(response), 429
-        else:
-            # Non-streaming response
-            response = {
-                "id": f"chatcmpl-mock-{int(time.time())}",
-                "object": "chat.completion",
-                "created": int(time.time()),
-                "model": model,
-                "choices": [{
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": "requesting a tool call",
-                        "tool_calls": [{
-                            "id": "call",
-                            "type": "function",
-                            "function": {
-                                "name": "fetch_product_reviews",
-                                "arguments": tool_args
-                            }
-                        }]
-                    },
-                    "finish_reason": "tool_calls"
-                }],
-                "usage": {
-                    "prompt_tokens": sum(len(m.get("content", "").split()) for m in messages),
-                    "completion_tokens": "0",
-                    "total_tokens": sum(len(m.get("content", "").split()) for m in messages)
-                }
-            }
-            return jsonify(response)
+#         app.logger.info(f"The model is: {model}")
+#         if model.endswith("rate-limit"):
+#             app.logger.info(f"Returning a rate limit error")
+#             response = {
+#                 "error": {
+#                     "message": "Rate limit reached. Please try again later.",
+#                     "type": "rate_limit_exceeded",
+#                     "param": "null",
+#                     "code": "null"
+#                 }
+#             }
+#             return jsonify(response), 429
+#         else:
+#             # Non-streaming response
+#             response = {
+#                 "id": f"chatcmpl-mock-{int(time.time())}",
+#                 "object": "chat.completion",
+#                 "created": int(time.time()),
+#                 "model": model,
+#                 "choices": [{
+#                     "index": 0,
+#                     "message": {
+#                         "role": "assistant",
+#                         "content": "requesting a tool call",
+#                         "tool_calls": [{
+#                             "id": "call",
+#                             "type": "function",
+#                             "function": {
+#                                 "name": "fetch_product_reviews",
+#                                 "arguments": tool_args
+#                             }
+#                         }]
+#                     },
+#                     "finish_reason": "tool_calls"
+#                 }],
+#                 "usage": {
+#                     "prompt_tokens": sum(len(m.get("content", "").split()) for m in messages),
+#                     "completion_tokens": "0",
+#                     "total_tokens": sum(len(m.get("content", "").split()) for m in messages)
+#                 }
+#             }
+#             return jsonify(response)
 
-    else:
-        # Generate the response
-        response_text = generate_response(product_id)
+#     else:
+#         # Generate the response
+#         response_text = generate_response(product_id)
 
-        return build_response(model, messages, response_text)
+#         return build_response(model, messages, response_text)
 
-def build_response(model, messages, response_text):
-    app.logger.info(f"Processing a response: '{response_text}'")
+# def build_response(model, messages, response_text):
+#     app.logger.info(f"Processing a response: '{response_text}'")
 
-    response = {
-        "id": f"chatcmpl-mock-{int(time.time())}",
-        "object": "chat.completion",
-        "created": int(time.time()),
-        "model": model,
-        "choices": [{
-            "index": 0,
-            "message": {
-                "role": "assistant",
-                "content": response_text
-            },
-            "finish_reason": "stop"
-        }],
-        "usage": {
-            "prompt_tokens": sum(len(m.get("content", "").split()) for m in messages),
-            "completion_tokens": len(response_text.split()),
-            "total_tokens": sum(len(m.get("content", "").split()) for m in messages) + len(response_text.split())
-        }
-    }
-    return jsonify(response)
+#     response = {
+#         "id": f"chatcmpl-mock-{int(time.time())}",
+#         "object": "chat.completion",
+#         "created": int(time.time()),
+#         "model": model,
+#         "choices": [{
+#             "index": 0,
+#             "message": {
+#                 "role": "assistant",
+#                 "content": response_text
+#             },
+#             "finish_reason": "stop"
+#         }],
+#         "usage": {
+#             "prompt_tokens": sum(len(m.get("content", "").split()) for m in messages),
+#             "completion_tokens": len(response_text.split()),
+#             "total_tokens": sum(len(m.get("content", "").split()) for m in messages) + len(response_text.split())
+#         }
+#     }
+#     return jsonify(response)
 
-@app.route('/v1/models', methods=['GET'])
-def list_models():
-    """List available models"""
-    return jsonify({
-        "object": "list",
-        "data": [
-            {
-                "id": "techx-llm",
-                "object": "model",
-                "created": int(time.time()),
-                "owned_by": "techx-shop"
-            }
-        ]
-    })
+# @app.route('/v1/models', methods=['GET'])
+# def list_models():
+#     """List available models"""
+#     return jsonify({
+#         "object": "list",
+#         "data": [
+#             {
+#                 "id": "techx-llm",
+#                 "object": "model",
+#                 "created": int(time.time()),
+#                 "owned_by": "techx-shop"
+#             }
+#         ]
+#     })
 
-def check_feature_flag(flag_name: str):
-    # Initialize OpenFeature
-    client = api.get_client()
-    return client.get_boolean_value(flag_name, False)
+# def check_feature_flag(flag_name: str):
+#     # Initialize OpenFeature
+#     client = api.get_client()
+#     return client.get_boolean_value(flag_name, False)
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
 
-    api.set_provider(FlagdProvider(host=os.environ.get('FLAGD_HOST', 'flagd'), port=os.environ.get('FLAGD_PORT', 8013)))
-    product_review_summaries = load_product_review_summaries(product_review_summaries_file_path)
-    inaccurate_product_review_summaries = load_product_review_summaries(inaccurate_product_review_summaries_file_path)
+#     api.set_provider(FlagdProvider(host=os.environ.get('FLAGD_HOST', 'flagd'), port=os.environ.get('FLAGD_PORT', 8013)))
+#     product_review_summaries = load_product_review_summaries(product_review_summaries_file_path)
+#     inaccurate_product_review_summaries = load_product_review_summaries(inaccurate_product_review_summaries_file_path)
 
-    app.logger.info(product_review_summaries)
+#     app.logger.info(product_review_summaries)
 
-    print("OpenAI API server starting on http://localhost:8000")
-    print("Set your OpenAI base URL to: http://localhost:8000/v1")
-    app.run(host='0.0.0.0', port=8000, debug=True)
+#     print("OpenAI API server starting on http://localhost:8000")
+#     print("Set your OpenAI base URL to: http://localhost:8000/v1")
+#     app.run(host='0.0.0.0', port=8000, debug=True)

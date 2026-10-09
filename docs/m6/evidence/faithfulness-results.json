@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "evaluation": "m6-faithfulness",
+  "endpoint": "http://localhost:8000/v1/chat/completions",
+  "aggregate": {
+    "total_cases": 10,
+    "passed": 10,
+    "faithfulness_rate": 1.0,
+    "answerable": {
+      "passed": 5,
+      "total": 5,
+      "rate": 1.0
+    },
+    "unanswerable": {
+      "passed": 5,
+      "total": 5,
+      "rate": 1.0
+    }
+  },
+  "results": [
+    {
+      "case_id": "faith-01",
+      "expected": "answerable",
+      "passed": true,
+      "model": "openai/gpt-oss-120b",
+      "response": "Users describe the camera as producing exceptionally sharp images, even in low light, with photos that are crisp and detailed."
+    },
+    {
+      "case_id": "faith-02",
+      "expected": "answerable",
+      "passed": true,
+      "model": "openai/gpt-oss-120b",
+      "response": "Battery easily lasts two full days of heavy use. I charge it once every other day, very convenient."
+    },
+    {
+      "case_id": "faith-03",
+      "expected": "answerable",
+      "passed": true,
+      "model": "openai/gpt-oss-120b",
+      "response": "Yes, the product is easy to set up. Reviewers noted that setup took less than five minutes with clear instructions and described the installation process as very intuitive."
+    },
+    {
+      "case_id": "faith-04",
+      "expected": "answerable",
+      "passed": true,
+      "model": "openai/gpt-oss-120b",
+      "response": "The audio quality is excellent, featuring deep bass, clear treble, and a very balanced sound."
+    },
+    {
+      "case_id": "faith-05",
+      "expected": "answerable",
+      "passed": true,
+      "model": "openai/gpt-oss-120b",
+      "response": "The reviews commonly complain about poor build quality and material durability, noting that the product feels flimsy, scratches easily, and broke after a short time."
+    },
+    {
+      "case_id": "faith-06",
+      "expected": "unanswerable",
+      "passed": true,
+      "model": "openai/gpt-oss-120b",
+      "response": "I don't have enough information to answer from the provided reviews."
+    },
+    {
+      "case_id": "faith-07",
+      "expected": "unanswerable",
+      "passed": true,
+      "model": "openai/gpt-oss-120b",
+      "response": "I don't have enough information to answer from the provided reviews."
+    },
+    {
+      "case_id": "faith-08",
+      "expected": "unanswerable",
+      "passed": true,
+      "model": "openai/gpt-oss-120b",
+      "response": "I don't have enough information to answer from the provided reviews."
+    },
+    {
+      "case_id": "faith-09",
+      "expected": "unanswerable",
+      "passed": true,
+      "model": "openai/gpt-oss-120b",
+      "response": "I don't have enough information to answer from the provided reviews."
+    },
+    {
+      "case_id": "faith-10",
+      "expected": "unanswerable",
+      "passed": true,
+      "model": "openai/gpt-oss-120b",
+      "response": "I don't have enough information to answer from the provided reviews."
+    }
+  ]
+}
