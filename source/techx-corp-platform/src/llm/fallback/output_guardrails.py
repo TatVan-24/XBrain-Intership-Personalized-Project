@@ -41,6 +41,47 @@ PROMPT_LEAK_PATTERNS = (
 )
 
 
+# STOPWORDS = frozenset({
+#     "the","a","an","is","are","was","were","be","been","being","have","has","had",
+#     "do","does","did","will","would","could","should","may","might","must","can",
+#     "this","that","these","those","i","you","he","she","it","we","they","what",
+#     "which","who","whom","whose","where","when","why","how","of","in","on","at",
+#     "to","for","with","from","by","about","as","into","through","during","before",
+#     "after","above","below","up","down","out","off","over","under","again","further",
+#     "then","once","here","there","all","any","both","each","few","more","most",
+#     "other","some","such","no","nor","not","only","own","same","so","than","too",
+#     "very","just","now","product","products","review","reviews","user","users",
+# })
+
+# ABSTAIN_MARKERS = (
+#     "no information", "don't have", "do not have", "unable to answer",
+#     "cannot answer", "can't answer", "not mentioned", "insufficient",
+# )
+
+
+# def extract_question_keywords(question: str, min_length: int = 4) -> set[str]:
+#     tokens = re.findall(r"\b[a-z0-9]+\b", question.lower())
+#     return {t for t in tokens if len(t) >= min_length and t not in STOPWORDS}
+
+
+# def check_qa_adherence(answer: str, question: str) -> tuple[bool, tuple[str, ...]]:
+#     """QA output is adherent if it either abstains or contains at least one
+#     question keyword. Non-adherent = output ignores the question."""
+#     text = normalize_text(answer).lower()
+
+#     if any(m in text for m in ABSTAIN_MARKERS):
+#         return True, ()
+
+#     q_kw = extract_question_keywords(question)
+#     if not q_kw:
+#         return True, ()  # cannot determine -> don't reject
+
+#     text_tokens = set(re.findall(r"\b[a-z0-9]+\b", text))
+#     if q_kw & text_tokens:
+#         return True, ()
+
+#     return False, ("QA_NOT_ADHERENT",)
+
 @dataclass(frozen=True)
 class Review:
     review_id: str
@@ -59,6 +100,8 @@ class Layer4Input:
     source_review_ids: tuple[str, ...]
     reviews: tuple[Review, ...]
     degraded: bool = False
+    task_type: Literal["summary", "qa"] = "summary"
+    question: str = "" 
 
 
 @dataclass(frozen=True)
@@ -203,6 +246,11 @@ def validate_candidate(payload: Layer4Input) -> Layer4Result:
 
     if copy_ratio >= EXCESSIVE_COPY_RATIO:
         warnings.append("EXCESSIVE_EXTRACTIVE_COPY")
+
+    # if payload.task_type == "qa" and payload.question.strip():
+    #     adherent, qa_violations = check_qa_adherence(summary, payload.question)
+    #     if not adherent:
+    #         violations.extend(qa_violations)    
 
     if violations:
         next_action = (
