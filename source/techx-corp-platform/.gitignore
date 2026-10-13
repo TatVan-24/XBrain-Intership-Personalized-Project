@@ -74,3 +74,14 @@ src/cart/src/Program.cs.bak
 src/flagd/demo.flagd.json.bak
 
 **/data/eval/faithfulness-results.json
+timeline.md
+
+# M14 eval outputs (regenerated)
+**/data/eval/nli-results-*.json
+**/data/eval/nli-cases-draft.jsonl
+**/data/eval/nli-cases.jsonl
+**/data/eval/cases.jsonl
+
+raw-output.txt
+
+mini-exp/
