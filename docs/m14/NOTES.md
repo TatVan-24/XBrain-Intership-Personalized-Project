@@ -1,0 +1,5 @@
+- M14 muốn: claim được source chống lưng
+- Hiện tại: keyword check (lexical)
+- Gap: abstraction mismatch
+- Chưa quyết: claim/evidence/support định nghĩa thế nào
+- Next: chốt definition trước khi code
