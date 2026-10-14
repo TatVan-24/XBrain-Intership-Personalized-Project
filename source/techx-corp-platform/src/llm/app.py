@@ -44,10 +44,53 @@ except ImportError as _e:
     _GUARDRAILS_AVAILABLE = False
     _GUARDRAILS_IMPORT_ERROR = str(_e)
 
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.flask import FlaskInstrumentor
+
 from openfeature import api
 from openfeature.contrib.provider.flagd import FlagdProvider
 
 app = Flask(__name__)
+
+def init_otel(service_name: str):
+    """
+    Khởi tạo OpenTelemetry tracer cho service.
+    Trả về tracer object để dùng ở các span sau này.
+    """
+    # 1. Resource: mô tả service này là ai
+    resource = Resource.create({
+        SERVICE_NAME: service_name,
+    })
+
+    # 2. Provider: nhà máy tạo tracer + span
+    provider = TracerProvider(resource=resource)
+
+    # 3. Exporter: đọc OTEL_EXPORTER_OTLP_ENDPOINT từ env
+    #    Nếu không có, mặc định http://localhost:4318 (nhưng trong Docker sẽ fail)
+    exporter = OTLPSpanExporter()
+
+    # 4. Gắn exporter vào provider.
+    #    BatchSpanProcessor: gom span rồi gửi theo lô, hiệu quả hơn gửi từng cái.
+    provider.add_span_processor(BatchSpanProcessor(exporter))
+
+    # 5. Set làm global provider
+    trace.set_tracer_provider(provider)
+
+    # 6. Lấy tracer có tên service
+    return trace.get_tracer(service_name)
+
+
+# Khởi tạo tracer ngay khi module load
+OTEL_SERVICE_NAME = os.environ.get("OTEL_SERVICE_NAME", "llm")
+tracer = init_otel(OTEL_SERVICE_NAME)
+
+# 7. Auto-instrument Flask: mỗi HTTP request tự động có span
+FlaskInstrumentor().instrument_app(app)
+
 app.logger.setLevel(logging.INFO)
 
 product_review_summaries = {}
@@ -94,41 +137,57 @@ class GroqCallError(Exception):
 
 def _call_groq_once(model, messages):
     """Single attempt. Returns (content, model_id). Raises GroqCallError."""
-    body = json.dumps({
-        "model": model,
-        "messages": messages,
-        "temperature": 0.2,
-    }).encode("utf-8")
+    with tracer.start_as_current_span("llm.groq_call") as span:
+        span.set_attribute("model", model)
 
-    req = urllib.request.Request(
-        f"{GROQ_BASE_URL}/chat/completions",
-        data=body,
-        method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "User-Agent": "techx-llm/1.0", 
-        },
-    )
+        body = json.dumps({
+            "model": model,
+            "messages": messages,
+            "temperature": 0.2,
+        }).encode("utf-8")
 
-    try:
-        with urllib.request.urlopen(req, timeout=GROQ_TIMEOUT_SECONDS) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        raise GroqCallError(f"http_{e.code}", status=e.code)
-    except urllib.error.URLError as e:
-        raise GroqCallError(f"network_{e.reason}")
-    except TimeoutError:
-        raise GroqCallError("timeout")
-    except json.JSONDecodeError:
-        raise GroqCallError("bad_json")
+        req = urllib.request.Request(
+            f"{GROQ_BASE_URL}/chat/completions",
+            data=body,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "User-Agent": "techx-llm/1.0", 
+            },
+        )
 
-    try:
-        content = payload["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError):
-        raise GroqCallError("bad_response_shape")
+        try:
+            with urllib.request.urlopen(req, timeout=GROQ_TIMEOUT_SECONDS) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            span.set_attribute("error", f"http_{e.code}")
+            raise GroqCallError(f"http_{e.code}", status=e.code)
+        except urllib.error.URLError as e:
+            span.set_attribute("error", "network")
+            raise GroqCallError(f"network_{e.reason}")
+        except TimeoutError:
+            span.set_attribute("error", "timeout")
+            raise GroqCallError("timeout")
+        except json.JSONDecodeError:
+            span.set_attribute("error", "bad_json")
+            raise GroqCallError("bad_json")
 
-    return content, payload.get("model", model)
+        try:
+            content = payload["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            span.set_attribute("error", "bad_response_shape")
+            raise GroqCallError("bad_response_shape")
+
+        # Ghi token usage vào span
+        usage = payload.get("usage", {})
+        span.set_attribute("tokens.prompt", usage.get("prompt_tokens", 0))
+        span.set_attribute("tokens.completion", usage.get("completion_tokens", 0))
+        span.set_attribute("tokens.total", usage.get("total_tokens", 0))
+        span.set_attribute("model_returned", payload.get("model", model))
+        span.set_attribute("outcome", "ok")
+
+        return content, payload.get("model", model)
 
 def call_groq_chain(messages):
     """Try each model in priority order. Returns (content, model_id, attempts)."""
@@ -289,6 +348,10 @@ def handle_summary(product_id, messages):
         app.logger.warning(f"guardrails unavailable: {_GUARDRAILS_IMPORT_ERROR}")
         return None
 
+    with tracer.start_as_current_span("llm.handle_summary") as span:
+        span.set_attribute("product_id", product_id)
+        span.set_attribute("surface", "summary")
+
     reviews = extract_reviews_from_messages(messages)
     if not reviews:
         app.logger.info("no reviews in tool messages -> mock fallback")
@@ -376,6 +439,10 @@ def handle_qa(product_id, messages):
     """QA path — different prompt + adherence check + no mock fallback."""
     if not _GUARDRAILS_AVAILABLE:
         return {"status": "unavailable", "reason": "guardrails_unavailable", "model": "guardrail"}
+
+    with tracer.start_as_current_span("llm.handle_qa") as span:
+        span.set_attribute("product_id", product_id)
+        span.set_attribute("surface", "qa")
 
     reviews = extract_reviews_from_messages(messages)
     if not reviews:
