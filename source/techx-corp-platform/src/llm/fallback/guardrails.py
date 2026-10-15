@@ -12,6 +12,14 @@ from contracts import SummaryRequest
 
 EMAIL = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 PHONE = re.compile(r"(?<!\w)(?:\+?\d[\d .()-]{7,}\d)(?!\w)")
+
+EMAIL = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
+PHONE = re.compile(r"(?<!\w)(?:\+?\d[\d .()-]{7,}\d)(?!\w)")
+CREDIT_CARD = re.compile(r"\b(?:\d[ -]*?){13,16}\b")
+SSN = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
+API_KEY = re.compile(r"\b(?:sk|gsk|pk|api)[_-][A-Za-z0-9]{20,}\b", re.IGNORECASE)
+CONTROL = re.compile(...)
+
 CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2060\ufeff]")
 SPACE = re.compile(r"\s+")
 
@@ -82,7 +90,10 @@ def reconstruct_spaced_tokens(text: str) -> tuple[str, bool]:
 def mask_pii(text: str) -> tuple[str, int]:
     text, emails = EMAIL.subn("[EMAIL]", text)
     text, phones = PHONE.subn("[PHONE]", text)
-    return text, emails + phones
+    text, cards = CREDIT_CARD.subn("[CREDIT_CARD]", text)
+    text, ssns = SSN.subn("[SSN]", text)
+    text, keys = API_KEY.subn("[API_KEY]", text)
+    return text, emails + phones + cards + ssns + keys
 
 
 def _fuzzy_signal(text: str) -> bool:
