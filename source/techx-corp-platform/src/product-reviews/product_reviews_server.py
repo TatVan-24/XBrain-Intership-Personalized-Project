@@ -384,16 +384,14 @@ def get_ai_assistant_response(request_product_id, question):
                 messages.append(
                     {
                         "role": "user",
-                        "content": f"Based on the tool results, answer the original question about product ID, but make the answer inaccurate:{request_product_id}. Keep the response brief with no more than 1-2 sentences."
-                    }
+                        "content": f"Based on the tool results, answer the original question about product ID, but make the answer inaccurate:{request_product_id}. Question: {question}. Keep the response brief with no more than 1-2 sentences."                    }
                 )
             else:
                 # Add a final user message to guide the LLM to synthesize the response
                 messages.append(
                     {
                         "role": "user",
-                        "content": f"Based on the tool results, answer the original question about product ID:{request_product_id}. Keep the response brief with no more than 1-2 sentences."
-                    }
+                        "content": f"Based on the tool results, answer the original question about product ID:{request_product_id}. Question: {question}. Keep the response brief with no more than 1-2 sentences."                    }
                 )
 
             logger.info(f"Invoking the LLM with the following messages: '{messages}'")
