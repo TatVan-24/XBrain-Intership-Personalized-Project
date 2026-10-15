@@ -54,6 +54,11 @@ from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from openfeature import api
 from openfeature.contrib.provider.flagd import FlagdProvider
 
+from opentelemetry._logs import set_logger_provider
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+
 app = Flask(__name__)
 
 def init_otel(service_name: str):
@@ -61,35 +66,44 @@ def init_otel(service_name: str):
     Khởi tạo OpenTelemetry tracer cho service.
     Trả về tracer object để dùng ở các span sau này.
     """
-    # 1. Resource: mô tả service này là ai
+    # 1. Resource: demonstrate the service
     resource = Resource.create({
         SERVICE_NAME: service_name,
     })
 
-    # 2. Provider: nhà máy tạo tracer + span
+    # 2. Provider: form tracer + span
     provider = TracerProvider(resource=resource)
 
-    # 3. Exporter: đọc OTEL_EXPORTER_OTLP_ENDPOINT từ env
-    #    Nếu không có, mặc định http://localhost:4318 (nhưng trong Docker sẽ fail)
+    # 3. Exporter: read OTEL_EXPORTER_OTLP_ENDPOINT from env
+    #    If not available, default url http://localhost:4318 ( Docker will be fail)
     exporter = OTLPSpanExporter()
 
-    # 4. Gắn exporter vào provider.
-    #    BatchSpanProcessor: gom span rồi gửi theo lô, hiệu quả hơn gửi từng cái.
+    # 4. Attach exporter into provider.
+    #    BatchSpanProcessor: collect span then send into batch, be better than inidividual.
     provider.add_span_processor(BatchSpanProcessor(exporter))
 
-    # 5. Set làm global provider
+    # 5. Set global provider
     trace.set_tracer_provider(provider)
 
-    # 6. Lấy tracer có tên service
+    # 6. Receive tracer service's name
     return trace.get_tracer(service_name)
 
 
-# Khởi tạo tracer ngay khi module load
+# Init tracer at the time module load
 OTEL_SERVICE_NAME = os.environ.get("OTEL_SERVICE_NAME", "llm")
 tracer = init_otel(OTEL_SERVICE_NAME)
 
-# 7. Auto-instrument Flask: mỗi HTTP request tự động có span
+# 7. Auto-instrument Flask: each HTTP request with span
 FlaskInstrumentor().instrument_app(app)
+
+logger_provider = LoggerProvider(resource=Resource.create({SERVICE_NAME: OTEL_SERVICE_NAME}))
+set_logger_provider(logger_provider)
+
+log_exporter = OTLPLogExporter()
+logger_provider.add_log_record_processor(BatchSpanProcessor(log_exporter))
+
+handler = LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider)
+app.logger.addHandler(handler)
 
 app.logger.setLevel(logging.INFO)
 
@@ -236,16 +250,28 @@ def extract_reviews_from_messages(messages):
             continue
 
         for i, item in enumerate(items):
-            if not isinstance(item, dict):
-                continue
-            text = item.get("text") or item.get("description") or item.get("comment")
-            if not text:
-                continue
-            reviews.append({
-                "review_id": str(item.get("review_id") or item.get("id") or f"r{i}"),
-                "text": str(text),
-                "score": item.get("score"),
-            })
+            # Case 1: item là dict, có field "text"/"description"/"comment"
+            if isinstance(item, dict):
+                text = item.get("text") or item.get("description") or item.get("comment")
+                if not text:
+                    continue
+                reviews.append({
+                    "review_id": str(item.get("review_id") or item.get("id") or f"r{i}"),
+                    "text": str(text),
+                    "score": item.get("score"),
+                })
+            # Case 2: item là list/tuple theo format [username, description, score]
+            elif isinstance(item, (list, tuple)) and len(item) >= 2:
+                username = str(item[0]) if item[0] is not None else f"r{i}"
+                text = str(item[1]) if item[1] is not None else ""
+                score = item[2] if len(item) > 2 else None
+                if not text.strip():
+                    continue
+                reviews.append({
+                    "review_id": username,
+                    "text": text,
+                    "score": score,
+                })
     return reviews if reviews else None
 
 def extract_summary_from_llm_output(content):
@@ -352,87 +378,96 @@ def handle_summary(product_id, messages):
         span.set_attribute("product_id", product_id)
         span.set_attribute("surface", "summary")
 
-    reviews = extract_reviews_from_messages(messages)
-    if not reviews:
-        app.logger.info("no reviews in tool messages -> mock fallback")
-        return None
+        reviews = extract_reviews_from_messages(messages)
+        if not reviews:
+            app.logger.info("no reviews in tool messages -> mock fallback")
+            return None
 
-    # Layer 1 — input guardrails
-    try:
-        layer1 = inspect_request({
-            "product_id": product_id,
-            "review_version": f"m6-{int(time.time())}",
-            "reviews": reviews,
-        })
-    except ValueError as e:
-        app.logger.warning(f"layer1_invalid: {e}")
-        return {"status": "unavailable", "reason": "input_invalid", "model": "guardrail"}
+        # Layer 1 — input guardrails
+        try:
+            with tracer.start_as_current_span("llm.input_guardrail") as span:
+                span.set_attribute("layer", "1")
+                span.set_attribute("operation", "input_guardrail")
 
-    if layer1.decision != "continue":
-        app.logger.info("layer1_abstain: all reviews quarantined")
-        return {"status": "unavailable", "reason": "all_reviews_quarantined", "model": "guardrail"}
+                layer1 = inspect_request({
+                    "product_id": product_id,
+                    "review_version": f"m6-{int(time.time())}",
+                    "reviews": reviews,
+                })
+                
+        except ValueError as e:
+            app.logger.warning(f"layer1_invalid: {e}")
+            return {"status": "unavailable", "reason": "input_invalid", "model": "guardrail"}
 
-    # Layer 2 — prompt builder
-    try:
-        prompt_pkg = build_prompt(
-            request_id=f"req-{int(time.time() * 1000)}",
-            guardrail_result=layer1,
-            current_review_version=layer1.review_version,
+        if layer1.decision != "continue":
+            app.logger.info("layer1_abstain: all reviews quarantined")
+            return {"status": "unavailable", "reason": "all_reviews_quarantined", "model": "guardrail"}
+
+        # Layer 2 — prompt builder
+        try:
+            prompt_pkg = build_prompt(
+                request_id=f"req-{int(time.time() * 1000)}",
+                guardrail_result=layer1,
+                current_review_version=layer1.review_version,
+            )
+        except PromptBuildError as e:
+            app.logger.warning(f"layer2_failed: {e.reason_code}")
+            return {"status": "unavailable", "reason": e.reason_code, "model": "guardrail"}
+
+        openai_messages = [{"role": m.role, "content": m.content} for m in prompt_pkg.messages]
+
+        # Groq with model failover
+        try:
+            content, model_id, attempts = call_groq_chain(openai_messages)
+            app.logger.info(f"RAW GROQ CONTENT: {content[:500]}")
+            app.logger.info(f"groq_attempts: {attempts} winner: {model_id}")
+        except GroqCallError as e:
+            app.logger.warning(f"groq_all_failed: {e.reason}")
+            return None
+
+        # Parse LLM JSON if present
+        summary_text = extract_summary_from_llm_output(content)
+        if summary_text is None:
+            return {"status": "unavailable", "reason": "llm_abstained", "model": model_id}
+        if not summary_text.strip():
+            return None
+        content = summary_text
+
+        # Layer 4 — output guardrails
+        guardrail_reviews = tuple(
+            GuardrailReview(review_id=r.review_id, text=r.sanitized_text, score=r.score)
+            for r in layer1.safe_reviews
         )
-    except PromptBuildError as e:
-        app.logger.warning(f"layer2_failed: {e.reason_code}")
-        return {"status": "unavailable", "reason": e.reason_code, "model": "guardrail"}
 
-    openai_messages = [{"role": m.role, "content": m.content} for m in prompt_pkg.messages]
+        with tracer.start_as_current_span("llm.output_validate") as span:
+            span.set_attribute("layer", "4")
+            span.set_attribute("operation", "output_validate")
+            validation = validate_candidate(
+                Layer4Input(
+                    request_id=prompt_pkg.request_id,
+                    product_id=product_id,
+                    review_version=layer1.review_version,
+                    candidate_role="primary",
+                    model=model_id,
+                    summary=content,
+                    source_review_ids=prompt_pkg.source_review_ids,
+                    reviews=guardrail_reviews,
+                    degraded=layer1.degraded,
+                    task_type="summary"
+                )
+            )
 
-    # Groq with model failover
-    try:
-        content, model_id, attempts = call_groq_chain(openai_messages)
-        app.logger.info(f"RAW GROQ CONTENT: {content[:500]}")
-        app.logger.info(f"groq_attempts: {attempts} winner: {model_id}")
-    except GroqCallError as e:
-        app.logger.warning(f"groq_all_failed: {e.reason}")
-        return None
+        if validation.decision == "reject":
+            app.logger.warning(f"layer4_reject: {validation.violations}")
+            return None
 
-    # Parse LLM JSON if present
-    summary_text = extract_summary_from_llm_output(content)
-    if summary_text is None:
-        return {"status": "unavailable", "reason": "llm_abstained", "model": model_id}
-    if not summary_text.strip():
-        return None
-    content = summary_text
-
-    # Layer 4 — output guardrails
-    guardrail_reviews = tuple(
-        GuardrailReview(review_id=r.review_id, text=r.sanitized_text, score=r.score)
-        for r in layer1.safe_reviews
-    )
-    validation = validate_candidate(
-        Layer4Input(
-            request_id=prompt_pkg.request_id,
-            product_id=product_id,
-            review_version=layer1.review_version,
-            candidate_role="primary",
-            model=model_id,
-            summary=content,
-            source_review_ids=prompt_pkg.source_review_ids,
-            reviews=guardrail_reviews,
-            degraded=layer1.degraded,
-            task_type="summary"
-        )
-    )
-
-    if validation.decision == "reject":
-        app.logger.warning(f"layer4_reject: {validation.violations}")
-        return None
-
-    return {
-        "status": "completed",
-        "summary": content,
-        "model": model_id,
-        "source_review_ids": list(prompt_pkg.source_review_ids),
-        "degraded": layer1.degraded,
-    }
+        return {
+            "status": "completed",
+            "summary": content,
+            "model": model_id,
+            "source_review_ids": list(prompt_pkg.source_review_ids),
+            "degraded": layer1.degraded,
+        }
 
 
 def handle_qa(product_id, messages):
@@ -444,88 +479,110 @@ def handle_qa(product_id, messages):
         span.set_attribute("product_id", product_id)
         span.set_attribute("surface", "qa")
 
-    reviews = extract_reviews_from_messages(messages)
-    if not reviews:
-        return {"status": "unavailable", "reason": "no_reviews", "model": "guardrail"}
+        reviews = extract_reviews_from_messages(messages)
+        if not reviews:
+            return {"status": "unavailable", "reason": "no_reviews", "model": "guardrail"}
 
-    question = extract_original_question(messages)
-    if not question:
-        return {"status": "unavailable", "reason": "no_question", "model": "guardrail"}
+        question = extract_original_question(messages)
+        if not question:
+            return {"status": "unavailable", "reason": "no_question", "model": "guardrail"}
 
-    try:
-        layer1 = inspect_request({
-            "product_id": product_id,
-            "review_version": f"m6-{int(time.time())}",
-            "reviews": reviews,
-        })
-    except ValueError as e:
-        app.logger.warning(f"qa layer1_invalid: {e}")
-        return {"status": "unavailable", "reason": "input_invalid", "model": "guardrail"}
+        try:
+            with tracer.start_as_current_span("llm.input_guardrail") as span:
+                span.set_attribute("layer", "1")
+                span.set_attribute("operation", "input_guardrail")
 
-    if layer1.decision != "continue":
-        app.logger.info("qa layer1_abstain")
-        return {"status": "unavailable", "reason": "all_reviews_quarantined", "model": "guardrail"}
+                layer1 = inspect_request({
+                    "product_id": product_id,
+                    "review_version": f"m6-{int(time.time())}",
+                    "reviews": reviews,
+                })
 
-    try:
-        prompt_pkg = build_qa_prompt(
-            request_id=f"req-{int(time.time() * 1000)}",
-            guardrail_result=layer1,
-            current_review_version=layer1.review_version,
-            question=question,
+                span.set_attribute("review_count", len(reviews))
+                span.set_attribute("safe_review_count", len(layer1.safe_reviews))
+                span.set_attribute("quarantined_count", len(layer1.quarantined_reviews))
+                span.set_attribute("pii_mask_count", layer1.pii_mask_count)
+                span.set_attribute("decision", layer1.decision)
+                span.set_attribute("degraded", layer1.degraded)
+
+        except ValueError as e:
+            app.logger.warning(f"qa layer1_invalid: {e}")
+            return {"status": "unavailable", "reason": "input_invalid", "model": "guardrail"}
+
+        if layer1.decision != "continue":
+            app.logger.info("qa layer1_abstain")
+            return {"status": "unavailable", "reason": "all_reviews_quarantined", "model": "guardrail"}
+
+        try:
+            prompt_pkg = build_qa_prompt(
+                request_id=f"req-{int(time.time() * 1000)}",
+                guardrail_result=layer1,
+                current_review_version=layer1.review_version,
+                question=question,
+            )
+        except PromptBuildError as e:
+            app.logger.warning(f"qa layer2_failed: {e.reason_code}")
+            return {"status": "unavailable", "reason": e.reason_code, "model": "guardrail"}
+
+        openai_messages = [{"role": m.role, "content": m.content} for m in prompt_pkg.messages]
+
+        try:
+            content, model_id, attempts = call_groq_chain(openai_messages)
+            app.logger.info(f"qa groq_attempts: {attempts} winner: {model_id}")
+        except GroqCallError as e:
+            app.logger.warning(f"qa groq_all_failed: {e.reason}")
+            return {"status": "unavailable", "reason": "groq_unavailable", "model": "guardrail"}
+
+        app.logger.info(f"RAW QA CONTENT: {content[:500]}")
+
+        qa_status, answer, source_ids = extract_qa_answer(content)
+
+        if qa_status == "unavailable":
+            return {"status": "unavailable", "reason": "insufficient_evidence", "model": model_id}
+        if qa_status == "unparsed":
+            answer = content  # backward compat, still validate below
+        if not answer or not answer.strip():
+            return {"status": "unavailable", "reason": "empty_answer", "model": model_id}
+
+        guardrail_reviews = tuple(
+            GuardrailReview(review_id=r.review_id, text=r.sanitized_text, score=r.score)
+            for r in layer1.safe_reviews
         )
-    except PromptBuildError as e:
-        app.logger.warning(f"qa layer2_failed: {e.reason_code}")
-        return {"status": "unavailable", "reason": e.reason_code, "model": "guardrail"}
 
-    openai_messages = [{"role": m.role, "content": m.content} for m in prompt_pkg.messages]
+        with tracer.start_as_current_span("llm.output_validate") as span:
+            span.set_attribute("layer", "4")
+            span.set_attribute("operation", "output_validate")
+            validation = validate_candidate(
+                Layer4Input(
+                    request_id=prompt_pkg.request_id,
+                    product_id=product_id,
+                    review_version=layer1.review_version,
+                    candidate_role="primary",
+                    model=model_id,
+                    summary=answer,
+                    source_review_ids=prompt_pkg.source_review_ids,
+                    reviews=guardrail_reviews,
+                    degraded=layer1.degraded,
+                    task_type="qa",
+                    question=question,
+                )
+            )
 
-    try:
-        content, model_id, attempts = call_groq_chain(openai_messages)
-        app.logger.info(f"qa groq_attempts: {attempts} winner: {model_id}")
-    except GroqCallError as e:
-        app.logger.warning(f"qa groq_all_failed: {e.reason}")
-        return {"status": "unavailable", "reason": "groq_unavailable", "model": "guardrail"}
+            span.set_attribute("decision", validation.decision)
+            span.set_attribute("violations_count", len(validation.violations))
+            if validation.violations:
+                span.set_attribute("violations", ",".join(validation.violations))
+                
+        if validation.decision == "reject":
+            app.logger.warning(f"qa layer4_reject: {validation.violations}")
+            return {"status": "unavailable", "reason": "qa_not_adherent", "model": model_id}
 
-    app.logger.info(f"RAW QA CONTENT: {content[:500]}")
-
-    qa_status, answer, source_ids = extract_qa_answer(content)
-
-    if qa_status == "unavailable":
-        return {"status": "unavailable", "reason": "insufficient_evidence", "model": model_id}
-    if qa_status == "unparsed":
-        answer = content  # backward compat, still validate below
-    if not answer or not answer.strip():
-        return {"status": "unavailable", "reason": "empty_answer", "model": model_id}
-
-    guardrail_reviews = tuple(
-        GuardrailReview(review_id=r.review_id, text=r.sanitized_text, score=r.score)
-        for r in layer1.safe_reviews
-    )
-    validation = validate_candidate(
-        Layer4Input(
-            request_id=prompt_pkg.request_id,
-            product_id=product_id,
-            review_version=layer1.review_version,
-            candidate_role="primary",
-            model=model_id,
-            summary=answer,
-            source_review_ids=prompt_pkg.source_review_ids,
-            reviews=guardrail_reviews,
-            degraded=layer1.degraded,
-            task_type="qa",
-            question=question,
-        )
-    )
-    if validation.decision == "reject":
-        app.logger.warning(f"qa layer4_reject: {validation.violations}")
-        return {"status": "unavailable", "reason": "qa_not_adherent", "model": model_id}
-
-    return {
-        "status": "completed",
-        "summary": answer,
-        "model": model_id,
-        "source_review_ids": list(source_ids) or list(prompt_pkg.source_review_ids),
-    }
+        return {
+            "status": "completed",
+            "summary": answer,
+            "model": model_id,
+            "source_review_ids": list(source_ids) or list(prompt_pkg.source_review_ids),
+        }
 
 
 # ---------- Response builders ----------
@@ -559,6 +616,7 @@ def chat_completions():
         return jsonify({"error": "no messages"}), 400
 
     app.logger.info(f"request with {len(messages)} messages, model={model}, tools={'yes' if tools else 'no'}")
+    app.logger.info(f"request headers: {dict(request.headers)}")
     last_message = str(messages[-1].get("content", ""))
 
     # Fixed responses (same as mock)
@@ -567,7 +625,8 @@ def chat_completions():
     if "Were there any negative reviews?" in last_message:
         return build_response(model, messages, "No, there were no reviews less than three stars for this product.")
     if not ("Can you summarize the product reviews?" in last_message
-            or "Based on the tool results, answer the original question about product ID" in last_message):
+            or "Based on the tool results, answer the original question about product ID" in last_message
+            or "Answer the following question about product ID" in last_message):
         return build_response(model, messages, "Sorry, I'm not able to answer that question.")
 
     product_id = parse_product_id(last_message)
