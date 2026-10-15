@@ -7,3 +7,8 @@ openfeature-provider-flagd==0.2.3
 transformers>=4.47,<6
 torch>=2.2,<3
 sentencepiece>=0.2,<1
+
+opentelemetry-api>=1.20,<2
+opentelemetry-sdk>=1.20,<2
+opentelemetry-exporter-otlp-proto-http>=1.20,<2
+opentelemetry-instrumentation-flask>=0.41b0,<1
